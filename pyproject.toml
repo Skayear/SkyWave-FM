@@ -1,0 +1,32 @@
+[project]
+name = "skywave"
+version = "0.1.0"
+description = "Add your description here"
+authors = [
+    { name = "Skayear", email = "skayearjbueno@hotmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+skywave = "skywave:main"
+
+[build-system]
+requires = ["uv_build>=0.11.33,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

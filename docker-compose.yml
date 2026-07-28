@@ -1,0 +1,16 @@
+services:
+  icecast:
+    image: deepcomp/icecast2:latest
+    container_name: skywave-icecast
+    restart: unless-stopped
+    # Puerto 8000 del host ocupado por otro contenedor (portainer), por eso
+    # mapeamos a 8010. Icecast adentro del contenedor sigue en su default 8000.
+    # Solo localhost por ahora. Cuando pasemos a producción (Fase 8) esto se
+    # sirve vía Tailscale, no expuesto en la LAN/interfaz pública.
+    ports:
+      - "127.0.0.1:8010:8000"
+    environment:
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD}
+      ICECAST_ADMIN_USER: ${ICECAST_ADMIN_USER}
+      ICECAST_ADMIN_PASSWORD: ${ICECAST_ADMIN_PASSWORD}
+      ICECAST_SERVER_HOST: ${ICECAST_SERVER_HOST:-localhost}
