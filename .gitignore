@@ -9,6 +9,8 @@ __pycache__/
 .env
 
 # Biblioteca musical y audio generado (nunca en el repo)
-library/
-cache/
+# Con barra inicial: ancla a la raíz del repo, para no matchear
+# src/skywave/library/ (el paquete de Python).
+/library/
+/cache/
 assets/ads/*.wav
