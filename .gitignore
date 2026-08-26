@@ -17,3 +17,6 @@ assets/ads/*.wav
 
 # Base SQLite generada por `skywave scan` (dato local, no código)
 *.db
+
+# Modelos de voz de Piper (~114MB, se bajan con python -m piper.download_voices)
+/voices/
