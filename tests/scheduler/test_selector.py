@@ -1,4 +1,5 @@
 import random
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -7,14 +8,14 @@ from skywave.library.track import Track
 from skywave.scheduler.selector import pick_next
 
 
-def _track(artist: str, title: str) -> Track:
+def _track(artist: str, title: str, duration: float = 180.0) -> Track:
     return Track(
         path=Path(f"/music/{artist}/{title}.flac"),
         artist=artist,
         title=title,
         album=None,
         year=None,
-        duration_seconds=180.0,
+        duration_seconds=duration,
     )
 
 
@@ -76,3 +77,37 @@ def test_deterministic_with_fixed_seed() -> None:
 def test_empty_catalog_raises() -> None:
     with pytest.raises(ValueError, match="vacío"):
         pick_next([], [], rng=random.Random(1))
+
+
+MADRUGADA = datetime(2026, 8, 26, 3, 0)
+TARDE = datetime(2026, 8, 26, 15, 0)
+EPICO = _track("Iron Maiden", "Rime of the Ancient Mariner", duration=810.0)
+CORTO = _track("Ramones", "Blitzkrieg Bop", duration=132.0)
+
+
+def test_night_block_prefers_short_tracks() -> None:
+    catalog = [EPICO, CORTO]
+
+    for seed in range(20):
+        track = pick_next(catalog, [], rng=random.Random(seed), now=MADRUGADA)
+        assert track == CORTO
+
+
+def test_daytime_has_no_duration_restriction() -> None:
+    # De tarde el tema largo tiene que poder sonar: con el corto recién
+    # tocado en el historial, el largo es el único candidato elegible.
+    catalog = [EPICO, CORTO]
+
+    track = pick_next(catalog, [CORTO], no_repeat_artist=1, rng=random.Random(1), now=TARDE)
+
+    assert track == EPICO
+
+
+def test_night_block_is_ignored_if_no_short_tracks_exist() -> None:
+    # Solo temas largos en la biblioteca: la regla de madrugada se ignora
+    # antes que dejar la radio muda.
+    catalog = [EPICO]
+
+    track = pick_next(catalog, [], rng=random.Random(1), now=MADRUGADA)
+
+    assert track == EPICO

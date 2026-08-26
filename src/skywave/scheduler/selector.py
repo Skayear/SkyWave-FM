@@ -1,7 +1,26 @@
 import random
 from collections.abc import Sequence
+from datetime import datetime
 
 from skywave.library.track import Track
+
+# Bloque "madrugada": de 0 a 5 inclusive se prefieren temas cortos.
+# Regla mínima a propósito — la interfaz de bloques horarios queda
+# preparada, pero configurar bloques por género/franja necesita metadata
+# que la biblioteca todavía no tiene. Se profundiza cuando crezca.
+_NIGHT_HOURS = range(0, 6)
+_NIGHT_MAX_DURATION_SECONDS = 240.0
+
+
+def _hourly_pool(catalog: Sequence[Track], now: datetime) -> Sequence[Track]:
+    """Reduce el catálogo según la franja horaria. Si la regla dejaría el
+    pool vacío, se ignora — mismo principio que la ventana de artista: la
+    radio nunca se queda muda por una regla."""
+    if now.hour in _NIGHT_HOURS:
+        short = [t for t in catalog if t.duration_seconds <= _NIGHT_MAX_DURATION_SECONDS]
+        if short:
+            return short
+    return catalog
 
 
 def pick_next(
@@ -10,22 +29,29 @@ def pick_next(
     *,
     no_repeat_artist: int = 3,
     rng: random.Random | None = None,
+    now: datetime | None = None,
 ) -> Track:
     """Elige la próxima pista: al azar entre las que su artista no sonó en
-    los últimos `no_repeat_artist` temas.
+    los últimos `no_repeat_artist` temas, dentro del pool de la franja
+    horaria actual.
 
     Si ningún track califica (biblioteca chica, ventana muy grande), la
     ventana se achica de a uno hasta encontrar candidatos — la radio nunca
     se queda muda por una regla demasiado estricta.
 
-    `rng` se inyecta como parámetro (en vez de usar el módulo `random`
-    global) para que los tests puedan pasar `random.Random(seed)` y ser
-    determinísticos. En producción se omite y usa azar real.
+    `rng` y `now` se inyectan como parámetros (en vez de usar `random` y
+    `datetime.now()` globales adentro) para que los tests puedan fijar
+    seed y hora y ser determinísticos. En producción se omiten y usan el
+    azar y el reloj reales.
     """
     if not catalog:
         raise ValueError("el catálogo está vacío, no hay nada para elegir")
     if rng is None:
         rng = random.Random()
+    if now is None:
+        now = datetime.now()
+
+    catalog = _hourly_pool(catalog, now)
 
     for window in range(no_repeat_artist, -1, -1):
         # Ojo con window=0: history[-0:] NO es una lista vacía, es la lista
