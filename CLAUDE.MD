@@ -87,7 +87,7 @@ Trabajamos fase por fase. No adelantes fases sin que yo lo pida.
       sin silencio. **Hito: que suene en ETS2 y en el navegador.**
       *Aprendo: subprocess, bytes/buffers, threading.*
       (Navegador confirmado; ETS2 todavía sin probar — ver docs/fase-2-salir-al-aire.md.)
-- [ ] **Fase 3 — Programación:** cola con rotación, regla de no-repetición,
+- [x] **Fase 3 — Programación:** cola con rotación, regla de no-repetición,
       bloques horarios, estado "sonando ahora".
 - [ ] **Fase 4 — El locutor:** wrapper de Piper, cache en disco por hash,
       generador de guiones con LLM (metadata + hora + qué viene después),
