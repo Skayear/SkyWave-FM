@@ -1,23 +1,9 @@
 from __future__ import annotations
 
-import logging
 import subprocess
 import threading
-from typing import IO
 
-logger = logging.getLogger(__name__)
-
-
-def _drain_stderr(stderr: IO[bytes]) -> None:
-    """Lee y loggea el stderr de un proceso ffmpeg hasta que se cierra.
-
-    No es opcional: el pipe de stderr tiene un buffer chico (~64KB en
-    Linux). Si nadie lo lee mientras el proceso vive, ffmpeg se bloquea
-    escribiendo ahí en cuanto se llena — un deadlock silencioso que solo
-    aparece con streams largos, no en una prueba rápida.
-    """
-    for line in stderr:
-        logger.debug("ffmpeg: %s", line.decode(errors="replace").rstrip())
+from skywave.mixer._process import drain_stderr
 
 
 class Encoder:
@@ -61,7 +47,7 @@ class Encoder:
         assert self._process.stderr is not None
         self._stdin = self._process.stdin
         self._stderr_thread = threading.Thread(
-            target=_drain_stderr, args=(self._process.stderr,), daemon=True
+            target=drain_stderr, args=(self._process.stderr,), daemon=True
         )
         self._stderr_thread.start()
 
