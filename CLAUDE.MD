@@ -89,7 +89,7 @@ Trabajamos fase por fase. No adelantes fases sin que yo lo pida.
       (Navegador confirmado; ETS2 todavía sin probar — ver docs/fase-2-salir-al-aire.md.)
 - [x] **Fase 3 — Programación:** cola con rotación, regla de no-repetición,
       bloques horarios, estado "sonando ahora".
-- [ ] **Fase 4 — El locutor:** wrapper de Piper, cache en disco por hash,
+- [x] **Fase 4 — El locutor:** wrapper de Piper, cache en disco por hash,
       generador de guiones con LLM (metadata + hora + qué viene después),
       plantillas de fallback. *Aprendo: APIs, cache, manejo de errores.*
 - [ ] **Fase 5 — Mezcla de verdad:** crossfade, ducking, colchón musical bajo

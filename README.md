@@ -15,13 +15,19 @@ de decisiones en [docs/](docs/).
 - ✅ Fase 1 — Librería musical (scanner, tags, SQLite, CLI)
 - ✅ Fase 2 — Salir al aire (mixer ffmpeg → Icecast)
 - ✅ Fase 3 — Programación (rotación, no-repetición, "sonando ahora")
-- ⏳ Fase 4 — El locutor (Piper TTS + guiones LLM) — próxima
+- ✅ Fase 4 — El locutor (Piper TTS + guiones LLM con fallback)
+- ⏳ Fase 5 — Mezcla de verdad (crossfade, ducking) — próxima
 
 ## Requisitos
 
 - Python 3.12+ y [`uv`](https://docs.astral.sh/uv/)
 - Docker (para Icecast2)
 - `ffmpeg` en el host (`sudo apt install ffmpeg`)
+- Para el locutor (opcional): la voz de Piper
+  (`uv run python -m piper.download_voices --download-dir voices es_AR-daniela-high`)
+  y [Ollama](https://ollama.com) con `ollama pull llama3.2:3b` para guiones
+  con LLM — sin Ollama, el locutor usa plantillas; sin la voz, la radio
+  sale sin locutor.
 
 ## Puesta en marcha
 
@@ -48,10 +54,10 @@ Con la radio sonando, escuchala en `http://localhost:8010/sky.mp3`
 |---------|----------|
 | `skywave scan <carpeta>` | Escanea recursivamente y guarda los tracks en SQLite |
 | `skywave list` | Lista la biblioteca en una tabla |
-| `skywave play` | Radio continua: rotación con no-repetición de artista hasta Ctrl+C |
+| `skywave play` | Radio continua: rotación, locutor entre temas, hasta Ctrl+C |
 
-Opciones útiles: `--db <archivo>` en todos (default `./skywave.db`),
-`--mount <nombre>` y `--no-repeat-artist <N>` en `play`.
+Opciones útiles: `--db <archivo>` en todos (default `./skywave.db`);
+`--mount <nombre>`, `--no-repeat-artist <N>` y `--sin-locutor` en `play`.
 
 ## Desarrollo
 
