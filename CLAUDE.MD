@@ -82,10 +82,11 @@ Trabajamos fase por fase. No adelantes fases sin que yo lo pida.
 - [x] **Fase 1 — Librería musical:** scanner recursivo, lectura de tags,
       modelo `Track`, persistencia SQLite, CLI (`skywave scan`, `skywave list`).
       *Aprendo: pathlib, dataclasses, sqlite3, typer.*
-- [ ] **Fase 2 — Salir al aire:** mixer que abre ffmpeg contra Icecast,
+- [x] **Fase 2 — Salir al aire:** mixer que abre ffmpeg contra Icecast,
       decodifica una pista a PCM y la escribe a ritmo real; encadenar pistas
       sin silencio. **Hito: que suene en ETS2 y en el navegador.**
       *Aprendo: subprocess, bytes/buffers, threading.*
+      (Navegador confirmado; ETS2 todavía sin probar — ver docs/fase-2-salir-al-aire.md.)
 - [ ] **Fase 3 — Programación:** cola con rotación, regla de no-repetición,
       bloques horarios, estado "sonando ahora".
 - [ ] **Fase 4 — El locutor:** wrapper de Piper, cache en disco por hash,
