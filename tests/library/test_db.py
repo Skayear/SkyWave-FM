@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 from skywave.library import db
@@ -22,7 +23,7 @@ def test_connect_creates_schema(tmp_path: Path) -> None:
 
     tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
 
-    assert [row["name"] for row in tables] == ["tracks"]
+    assert [row["name"] for row in tables] == ["tracks", "now_playing"]
 
 
 def test_connect_twice_on_same_file_does_not_fail(tmp_path: Path) -> None:
@@ -75,3 +76,60 @@ def test_list_tracks_on_empty_db_is_empty_list(tmp_path: Path) -> None:
     conn = db.connect(tmp_path / "library.db")
 
     assert db.list_tracks(conn) == []
+
+
+def test_now_playing_roundtrip(tmp_path: Path) -> None:
+    conn = db.connect(tmp_path / "library.db")
+    track = _track()
+    started = datetime(2026, 8, 26, 15, 0, 0, tzinfo=UTC)
+
+    with conn:
+        db.upsert_track(conn, track)
+        db.set_now_playing(conn, track, started_at=started)
+
+    now = db.get_now_playing(conn)
+
+    assert now is not None
+    assert now.track == track
+    assert now.started_at == started
+
+
+def test_set_now_playing_overwrites_previous_state(tmp_path: Path) -> None:
+    conn = db.connect(tmp_path / "library.db")
+    first = _track()
+    second = _track(path=Path("/music/b/02 - y.flac"), title="Otro tema")
+
+    with conn:
+        db.upsert_track(conn, first)
+        db.upsert_track(conn, second)
+        db.set_now_playing(conn, first)
+        db.set_now_playing(conn, second)
+
+    rows = conn.execute("SELECT COUNT(*) AS n FROM now_playing").fetchone()
+    now = db.get_now_playing(conn)
+
+    assert rows["n"] == 1
+    assert now is not None
+    assert now.track == second
+
+
+def test_get_now_playing_when_nothing_playing_is_none(tmp_path: Path) -> None:
+    conn = db.connect(tmp_path / "library.db")
+
+    assert db.get_now_playing(conn) is None
+
+
+def test_set_now_playing_defaults_to_current_utc_time(tmp_path: Path) -> None:
+    conn = db.connect(tmp_path / "library.db")
+    track = _track()
+
+    before = datetime.now(UTC)
+    with conn:
+        db.upsert_track(conn, track)
+        db.set_now_playing(conn, track)
+    after = datetime.now(UTC)
+
+    now = db.get_now_playing(conn)
+
+    assert now is not None
+    assert before <= now.started_at <= after
