@@ -6,7 +6,9 @@ authors = [
     { name = "Skayear", email = "skayearjbueno@hotmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "mutagen>=1.48.1",
+]
 
 [project.scripts]
 skywave = "skywave:main"
