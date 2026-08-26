@@ -1,6 +1,8 @@
+import os
 from pathlib import Path
 
 import typer
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
@@ -8,6 +10,8 @@ from skywave.library import db
 from skywave.library.scanner import find_audio_files
 from skywave.library.tags import read_tags
 from skywave.library.track import Track
+from skywave.mixer.encoder import Encoder
+from skywave.mixer.player import play_tracks
 
 app = typer.Typer()
 console = Console()
@@ -20,6 +24,7 @@ _DbOption = typer.Option(DEFAULT_DB_PATH, "--db", help="Archivo SQLite de la bib
 _CarpetaArgument = typer.Argument(
     ..., exists=True, file_okay=False, help="Carpeta de música a escanear recursivamente."
 )
+_MountOption = typer.Option("sky.mp3", "--mount", help="Punto de montaje en Icecast.")
 
 
 @app.command()
@@ -63,3 +68,33 @@ def list_tracks(db_path: Path = _DbOption) -> None:
             track.album or "-",
         )
     console.print(table)
+
+
+def _icecast_url(mount: str) -> str:
+    load_dotenv()
+    password = os.environ.get("ICECAST_SOURCE_PASSWORD")
+    if password is None:
+        console.print("[bold red]Falta ICECAST_SOURCE_PASSWORD[/bold red] (¿existe el .env?).")
+        raise typer.Exit(code=1)
+    host = os.environ.get("ICECAST_SERVER_HOST", "localhost")
+    port = os.environ.get("ICECAST_SOURCE_PORT", "8010")
+    return f"icecast://source:{password}@{host}:{port}/{mount}"
+
+
+@app.command()
+def play(db_path: Path = _DbOption, mount: str = _MountOption) -> None:
+    """Sale al aire: reproduce toda la biblioteca en secuencia contra Icecast."""
+    conn = db.connect(db_path)
+    tracks = db.list_tracks(conn)
+
+    if not tracks:
+        console.print(
+            "La biblioteca está vacía. Corré [bold]skywave scan <carpeta>[/bold] primero."
+        )
+        raise typer.Exit()
+
+    icecast_url = _icecast_url(mount)
+    console.print(f"Saliendo al aire: {len(tracks)} tracks -> [bold]{mount}[/bold]")
+    with Encoder(icecast_url) as encoder:
+        play_tracks(encoder, (track.path for track in tracks))
+    console.print("Listo.")
