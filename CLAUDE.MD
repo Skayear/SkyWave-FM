@@ -77,9 +77,9 @@ Cinco componentes, cada uno un subpaquete de `skywave/`:
 
 Trabajamos fase por fase. No adelantes fases sin que yo lo pida.
 
-- [ ] **Fase 0 — Base:** repo, `uv`, estructura de paquete, ruff + pytest,
+- [x] **Fase 0 — Base:** repo, `uv`, estructura de paquete, ruff + pytest,
       Docker Compose con Icecast2 andando y probado con un MP3 cualquiera.
-- [ ] **Fase 1 — Librería musical:** scanner recursivo, lectura de tags,
+- [x] **Fase 1 — Librería musical:** scanner recursivo, lectura de tags,
       modelo `Track`, persistencia SQLite, CLI (`skywave scan`, `skywave list`).
       *Aprendo: pathlib, dataclasses, sqlite3, typer.*
 - [ ] **Fase 2 — Salir al aire:** mixer que abre ffmpeg contra Icecast,
