@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from pathlib import Path
 
 import typer
@@ -6,6 +7,9 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
+from skywave.host.cache import VoiceCache
+from skywave.host.scripts import OllamaGenerator, ResilientScriptWriter, TemplateGenerator
+from skywave.host.tts import DEFAULT_VOICE, Synthesizer
 from skywave.library import db
 from skywave.library.scanner import find_audio_files
 from skywave.library.tags import read_tags
@@ -82,12 +86,28 @@ def _icecast_url(mount: str) -> str:
     return f"icecast://source:{password}@{host}:{port}/{mount}"
 
 
+def _build_locutor() -> tuple[ResilientScriptWriter, VoiceCache] | None:
+    """Arma el pipeline del locutor (guiones + voz + cache). Si falta la voz
+    de Piper, avisa y devuelve None: la radio sale igual, sin locutor."""
+    try:
+        synthesizer = Synthesizer()
+    except FileNotFoundError as error:
+        console.print(f"[yellow]Sin locutor:[/yellow] {error}")
+        return None
+    writer = ResilientScriptWriter(OllamaGenerator(), TemplateGenerator())
+    cache = VoiceCache(synthesizer.synthesize, voice_id=DEFAULT_VOICE.stem)
+    return writer, cache
+
+
 @app.command()
 def play(
     db_path: Path = _DbOption,
     mount: str = _MountOption,
     no_repeat_artist: int = typer.Option(
         3, "--no-repeat-artist", help="Ventana de temas sin repetir artista."
+    ),
+    locutor: bool = typer.Option(
+        True, "--locutor/--sin-locutor", help="Presentar los temas con voz entre tema y tema."
     ),
 ) -> None:
     """Sale al aire en modo radio: suena indefinidamente hasta Ctrl+C."""
@@ -100,9 +120,11 @@ def play(
         )
         raise typer.Exit()
 
+    host = _build_locutor() if locutor else None
     icecast_url = _icecast_url(mount)
     console.print(f"Al aire con {len(catalog)} tracks -> [bold]{mount}[/bold] (Ctrl+C para cortar)")
     history: list[Track] = []
+    previous: Track | None = None
     try:
         with Encoder(icecast_url) as encoder:
             while True:
@@ -113,8 +135,19 @@ def play(
                 del history[:-20]
                 with conn:
                     db.set_now_playing(conn, track)
+                if host is not None:
+                    # Nada del locutor puede voltear la música: si el guion,
+                    # la síntesis o el cache fallan, el tema entra igual.
+                    try:
+                        writer, cache = host
+                        script = writer.generate(previous, track, datetime.now())
+                        console.print(f"🎙 {script}")
+                        play_track(encoder, cache.wav_for(script))
+                    except Exception as error:
+                        console.print(f"[yellow]Locutor falló ({error}), sigue la música.[/yellow]")
                 console.print(f"♪ {track.artist} — {track.title}")
                 play_track(encoder, track.path)
+                previous = track
     except KeyboardInterrupt:
         console.print("\nCortando la radio.")
     finally:
