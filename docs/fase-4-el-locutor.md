@@ -98,6 +98,16 @@ pipeline de voz se reporta y el tema entra igual.
   que de todos modos retoca cómo sale el locutor al aire (ducking).
 - **La carga en frío de Ollama** (~2GB a RAM) supera con comodidad un
   timeout de 15s: el default subió a 30s.
+- **`Broken pipe` real al aire, encontrado por Pablo después de cerrar la
+  fase.** El `source-timeout` default de Icecast (10s) es más corto que lo
+  que tarda Ollama en generar un guion: mientras genera, el encoder no le
+  escribe nada al pipe, Icecast lo desconecta por inactividad, y el
+  próximo `write()` explota. Se corrigió generando un `icecast.xml` propio
+  con `source-timeout` en 60s (la imagen no lo expone como variable de
+  entorno) — ver `config/icecast.xml.template` y
+  `scripts/render-icecast-config.sh`. La pre-generación del issue #20
+  también resuelve esto de raíz (el encoder nunca queda esperando), pero
+  el timeout más alto es la red de seguridad mientras tanto.
 
 ## Para estudiar antes de Fase 5
 

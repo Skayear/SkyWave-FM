@@ -79,7 +79,8 @@ instala `uv` solo la primera vez que corras `uv run`.
 
 ```bash
 # 1. Configurar secretos (una sola vez)
-cp .env.example .env        # completar con passwords reales
+cp .env.example .env             # completar con passwords reales
+./scripts/render-icecast-config.sh   # genera config/icecast.xml desde .env
 
 # 2. Levantar Icecast
 docker compose up -d
@@ -103,6 +104,9 @@ red: `http://<ip-de-esta-máquina>:8010/sky.mp3`.
 | `ICECAST_ADMIN_USER` / `ICECAST_ADMIN_PASSWORD` | Admin web de Icecast |
 | `ICECAST_SERVER_HOST` | Host de Icecast (default `localhost`) |
 | `ICECAST_SOURCE_PORT` | Puerto en el host (default `8010` — el 8000 estaba ocupado) |
+
+Si cambiás `.env`, correr de nuevo `./scripts/render-icecast-config.sh` y
+`docker compose up -d` (Icecast no relee su config solo).
 
 ## Comandos
 
