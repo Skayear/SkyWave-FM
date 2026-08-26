@@ -142,3 +142,37 @@ El estado del trabajo se trackea en los
 [issues y milestones](https://github.com/Skayear/SkyWave-FM/milestones) del
 repo, un milestone por fase. Las decisiones de diseño de cada fase están
 en su bitácora dentro de [docs/](docs/).
+
+## Documentación de las tecnologías
+
+**Python**
+- [Python (stdlib)](https://docs.python.org/3/) — `pathlib`, `sqlite3`,
+  `subprocess`, `dataclasses`, `threading`, todo lo que no es una dependencia
+- [uv](https://docs.astral.sh/uv/) — gestor de paquetes y proyecto
+- [ruff](https://docs.astral.sh/ruff/) — lint + formato
+- [pytest](https://docs.pytest.org/)
+
+**CLI y librería musical**
+- [typer](https://typer.tiangolo.com/) — la CLI (`skywave scan/list/play`)
+- [rich](https://rich.readthedocs.io/) — tablas y salida de consola
+- [mutagen](https://mutagen.readthedocs.io/) — lectura de tags de audio
+- [python-dotenv](https://github.com/theskumar/python-dotenv) — carga de `.env`
+
+**Streaming y audio**
+- [Icecast2](https://icecast.org/docs/) — servidor de streaming
+- [ffmpeg](https://ffmpeg.org/documentation.html) — decodificar/codificar
+  audio (`mixer/encoder.py`, `mixer/decoder.py`)
+- [Docker Compose](https://docs.docker.com/compose/) — levanta Icecast
+- [NumPy](https://numpy.org/doc/) — arrays de PCM (Fase 5: crossfade, ducking)
+
+**El locutor**
+- [Piper](https://github.com/rhasspy/piper) — TTS local
+- [Ollama](https://github.com/ollama/ollama/blob/main/docs/api.md) — API
+  local de LLM para los guiones
+
+**Más adelante en el roadmap**
+- [FastAPI](https://fastapi.tiangolo.com/) — la web (Fase 7)
+- [Tailscale](https://tailscale.com/kb) — acceso remoto sin exponer a
+  internet (Fase 8)
+- [Prometheus](https://prometheus.io/docs/) /
+  [Grafana](https://grafana.com/docs/) — métricas y dashboard (Fase 8)
