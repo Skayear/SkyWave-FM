@@ -7,6 +7,9 @@ __pycache__/
 
 # Secretos
 .env
+# Generado por scripts/render-icecast-config.sh a partir del .template:
+# tiene las passwords de Icecast en texto plano.
+/config/icecast.xml
 
 # Biblioteca musical y audio generado (nunca en el repo)
 # Con barra inicial: ancla a la raíz del repo, para no matchear

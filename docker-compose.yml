@@ -10,8 +10,10 @@ services:
     # cuando llegue Fase 8 esto vuelve a "127.0.0.1:8010:8000".
     ports:
       - "8010:8000"
-    environment:
-      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD}
-      ICECAST_ADMIN_USER: ${ICECAST_ADMIN_USER}
-      ICECAST_ADMIN_PASSWORD: ${ICECAST_ADMIN_PASSWORD}
-      ICECAST_SERVER_HOST: ${ICECAST_SERVER_HOST:-localhost}
+    # icecast.xml propio (no las ICECAST_* env vars que soporta la imagen):
+    # necesitamos subir <source-timeout> por encima de lo que tarda el
+    # locutor en generar un guion con Ollama — ver config/icecast.xml.template
+    # y scripts/render-icecast-config.sh. Si el archivo no existe todavía,
+    # correr ese script primero (usa .env).
+    volumes:
+      - ./config/icecast.xml:/etc/icecast.xml:ro
