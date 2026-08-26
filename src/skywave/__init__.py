@@ -1,2 +1,5 @@
+from skywave.cli import app
+
+
 def main() -> None:
-    print("Hello from skywave!")
+    app()
