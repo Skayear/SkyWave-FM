@@ -55,7 +55,14 @@ class Encoder:
         self._stdin.write(pcm)
 
     def close(self) -> None:
-        self._stdin.close()
+        # En un Ctrl+C, el ffmpeg hijo recibe el mismo SIGINT que nosotros
+        # (comparte el process group de la terminal) y puede haber muerto ya
+        # — cerrar el pipe de un proceso muerto tira BrokenPipeError, y acá
+        # no nos aporta nada: el objetivo (que ffmpeg termine) ya se cumplió.
+        try:
+            self._stdin.close()
+        except BrokenPipeError:
+            pass
         self._process.wait()
         self._stderr_thread.join(timeout=5)
 

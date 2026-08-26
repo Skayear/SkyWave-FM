@@ -5,10 +5,17 @@ from skywave.mixer.decoder import Decoder
 from skywave.mixer.encoder import Encoder
 
 
+def play_track(encoder: Encoder, path: Path) -> None:
+    """Reproduce una pista completa contra `encoder`, que sigue vivo al
+    terminar — la conexión a Icecast no se toca entre pistas, solo cambia
+    el Decoder que la alimenta."""
+    decoder = Decoder(path)
+    for chunk in decoder.chunks():
+        encoder.write(chunk)
+
+
 def play_tracks(encoder: Encoder, paths: Iterable[Path]) -> None:
-    """Reproduce `paths` en secuencia contra `encoder`, ya abierto y vivo
-    durante toda la secuencia: solo cambia el Decoder de una pista a la
-    siguiente, la conexión a Icecast no se toca entre temas.
+    """Reproduce `paths` en secuencia contra el mismo `encoder`.
 
     No gapless a nivel milisegundo todavía (cada Decoder arranca su propio
     proceso ffmpeg, que tarda un poco en levantar) — alcanza con que el
@@ -16,6 +23,4 @@ def play_tracks(encoder: Encoder, paths: Iterable[Path]) -> None:
     adelante si hace falta.
     """
     for path in paths:
-        decoder = Decoder(path)
-        for chunk in decoder.chunks():
-            encoder.write(chunk)
+        play_track(encoder, path)

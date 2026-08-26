@@ -108,6 +108,12 @@ def set_now_playing(
     )
 
 
+def clear_now_playing(conn: sqlite3.Connection) -> None:
+    """La radio dejó de sonar: mejor ninguna fila que una fila vieja
+    mintiendo qué suena."""
+    conn.execute("DELETE FROM now_playing")
+
+
 def get_now_playing(conn: sqlite3.Connection) -> NowPlaying | None:
     row = conn.execute(
         """

@@ -113,6 +113,18 @@ def test_set_now_playing_overwrites_previous_state(tmp_path: Path) -> None:
     assert now.track == second
 
 
+def test_clear_now_playing(tmp_path: Path) -> None:
+    conn = db.connect(tmp_path / "library.db")
+    track = _track()
+
+    with conn:
+        db.upsert_track(conn, track)
+        db.set_now_playing(conn, track)
+        db.clear_now_playing(conn)
+
+    assert db.get_now_playing(conn) is None
+
+
 def test_get_now_playing_when_nothing_playing_is_none(tmp_path: Path) -> None:
     conn = db.connect(tmp_path / "library.db")
 

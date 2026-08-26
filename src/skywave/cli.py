@@ -11,7 +11,8 @@ from skywave.library.scanner import find_audio_files
 from skywave.library.tags import read_tags
 from skywave.library.track import Track
 from skywave.mixer.encoder import Encoder
-from skywave.mixer.player import play_tracks
+from skywave.mixer.player import play_track
+from skywave.scheduler.selector import pick_next
 
 app = typer.Typer()
 console = Console()
@@ -82,19 +83,40 @@ def _icecast_url(mount: str) -> str:
 
 
 @app.command()
-def play(db_path: Path = _DbOption, mount: str = _MountOption) -> None:
-    """Sale al aire: reproduce toda la biblioteca en secuencia contra Icecast."""
+def play(
+    db_path: Path = _DbOption,
+    mount: str = _MountOption,
+    no_repeat_artist: int = typer.Option(
+        3, "--no-repeat-artist", help="Ventana de temas sin repetir artista."
+    ),
+) -> None:
+    """Sale al aire en modo radio: suena indefinidamente hasta Ctrl+C."""
     conn = db.connect(db_path)
-    tracks = db.list_tracks(conn)
+    catalog = db.list_tracks(conn)
 
-    if not tracks:
+    if not catalog:
         console.print(
             "La biblioteca está vacía. Corré [bold]skywave scan <carpeta>[/bold] primero."
         )
         raise typer.Exit()
 
     icecast_url = _icecast_url(mount)
-    console.print(f"Saliendo al aire: {len(tracks)} tracks -> [bold]{mount}[/bold]")
-    with Encoder(icecast_url) as encoder:
-        play_tracks(encoder, (track.path for track in tracks))
-    console.print("Listo.")
+    console.print(f"Al aire con {len(catalog)} tracks -> [bold]{mount}[/bold] (Ctrl+C para cortar)")
+    history: list[Track] = []
+    try:
+        with Encoder(icecast_url) as encoder:
+            while True:
+                track = pick_next(catalog, history, no_repeat_artist=no_repeat_artist)
+                history.append(track)
+                # El historial solo alimenta la ventana de no-repetición:
+                # con quedarnos los últimos temas alcanza, no crece infinito.
+                del history[:-20]
+                with conn:
+                    db.set_now_playing(conn, track)
+                console.print(f"♪ {track.artist} — {track.title}")
+                play_track(encoder, track.path)
+    except KeyboardInterrupt:
+        console.print("\nCortando la radio.")
+    finally:
+        with conn:
+            db.clear_now_playing(conn)
