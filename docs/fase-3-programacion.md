@@ -81,7 +81,10 @@ tiene. Se profundiza cuando crezca.
   (un álbum de Megadeth) como *artista*: esos archivos están en
   `Megadeth/Rust In Peace/` sin tags, y el fallback solo mira la carpeta
   inmediata. Anotado como mejora futura del fallback (reconocer estructura
-  `Artista/Álbum/`), no bloqueaba esta fase.
+  `Artista/Álbum/`), no bloqueaba esta fase. **Arreglado el 2026-08-27**
+  — el bug salió a la luz al aire, en un guion del locutor que decía "de
+  Rust In Peace" — ver `Track.from_tags(..., root=...)` en
+  `library/track.py`.
 
 ## Para estudiar antes de Fase 4
 
