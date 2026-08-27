@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
+from skywave.ads.render import render_ads
 from skywave.host.cache import VoiceCache
 from skywave.host.scripts import OllamaGenerator, ResilientScriptWriter, TemplateGenerator
 from skywave.host.tts import DEFAULT_VOICE, Synthesizer
@@ -32,6 +33,12 @@ _CarpetaArgument = typer.Argument(
     ..., exists=True, file_okay=False, help="Carpeta de música a escanear recursivamente."
 )
 _MountOption = typer.Option("sky.mp3", "--mount", help="Punto de montaje en Icecast.")
+_AdsScriptsDirOption = typer.Option(
+    Path("assets/ads/scripts"), "--scripts-dir", help="Carpeta con los guiones .txt curados."
+)
+_AdsOutDirOption = typer.Option(
+    Path("assets/ads"), "--out-dir", help="Carpeta donde se escriben los WAV renderizados."
+)
 
 
 @app.command()
@@ -75,6 +82,34 @@ def list_tracks(db_path: Path = _DbOption) -> None:
             track.album or "-",
         )
     console.print(table)
+
+
+@app.command(name="render-ads")
+def render_ads_command(
+    scripts_dir: Path = _AdsScriptsDirOption,
+    out_dir: Path = _AdsOutDirOption,
+) -> None:
+    """Sintetiza a WAV las publicidades curadas a mano en --scripts-dir.
+
+    Paso manual: se corre cuando se agrega o edita una publicidad, no es
+    parte del loop de la radio en vivo — las publicidades nunca se generan
+    en vivo.
+    """
+    try:
+        synthesizer = Synthesizer()
+    except FileNotFoundError as error:
+        console.print(f"[bold red]Sin voz de Piper:[/bold red] {error}")
+        raise typer.Exit(code=1) from error
+
+    if not scripts_dir.exists():
+        console.print(f"No hay guiones en [bold]{scripts_dir}[/bold] todavía.")
+        raise typer.Exit()
+
+    rendered = render_ads(scripts_dir, out_dir, synthesizer.synthesize)
+    if not rendered:
+        console.print(f"Ningún guion [bold].txt[/bold] en [bold]{scripts_dir}[/bold].")
+        raise typer.Exit()
+    console.print(f"{len(rendered)} publicidades renderizadas en [bold]{out_dir}[/bold]")
 
 
 def _icecast_url(mount: str) -> str:
