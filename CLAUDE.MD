@@ -26,7 +26,8 @@ Radio online personal con locutor IA. Proyecto de aprendizaje: el objetivo
 - **mutagen** para leer tags ID3/FLAC
 - **numpy** para mezcla de audio (crossfade, ducking)
 - **SQLite** para la biblioteca musical y la cola de saludos
-- **Piper** para TTS local (voz en español, `es_AR-daniela` o similar)
+- **Kokoro** para TTS local (voz en español `ef_dora`; reemplazó a Piper
+  después de compararlo contra XTTS-v2 en Fase 4+ — ver issue #24)
 - **FastAPI** para la web (reproductor + "sonando ahora" + text box de saludos)
 - **typer** para la CLI
 - **ruff** (lint + format) y **pytest**
@@ -42,7 +43,7 @@ Cinco componentes, cada uno un subpaquete de `skywave/`:
 2. **`scheduler/`** — decide qué suena: rotación, no repetir artista en X temas,
    bloques por hora, cuándo entra un aviso o un saludo.
 3. **`host/`** (el locutor) — recibe metadata del tema que termina y del que
-   arranca, genera un guion corto con el LLM, lo convierte a voz con Piper,
+   arranca, genera un guion corto con el LLM, lo convierte a voz con Kokoro,
    cachea el WAV por hash del texto. **Siempre** con fallback a plantillas
    si el LLM falla: la radio nunca se queda muda.
 4. **`mixer/`** — el corazón. Mantiene un proceso ffmpeg abierto empujando a
@@ -67,7 +68,9 @@ Cinco componentes, cada uno un subpaquete de `skywave/`:
   Uso estrictamente personal, música digitalizada de mis propios discos.
   Nada de exposición pública, nada de listado público de mounts.
   Evitar HTTP Basic Auth: ETS2 no lo maneja bien.
-- **TTS local con Piper**, no servicios pagos.
+- **TTS local con Kokoro**, no servicios pagos. (Antes Piper; cambiado
+  después de comparar contra XTTS-v2 — Kokoro sonó mejor y anduvo bastante
+  más rápido en CPU. Ver issue #24 y docs/fase-4-el-locutor.md.)
 - **Publicidades falsas estilo GTA:** se generan y curan una sola vez a mano,
   se renderizan a WAV en `assets/ads/` y el scheduler las rota. **No** se
   generan en vivo.

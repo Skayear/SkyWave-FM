@@ -119,6 +119,18 @@ pipeline de voz se reporta y el tema entra igual.
   aparezca en el texto generado, y si no, lo descarta como inválido —
   `ResilientScriptWriter` cae a plantillas, el mismo mecanismo que ya
   existía para Ollama caído o con timeout.
+- **Piper reemplazado por Kokoro (2026-08-27).** Pablo pidió comparar
+  alternativas de voz en ramas separadas (issue #24): `spike/xtts-v2` y
+  `spike/kokoro`, mismo guion sintetizado con las tres para comparar en
+  igualdad de condiciones. Veredicto a la escucha: Kokoro suena mejor.
+  También fue ~10x más rápido que XTTS-v2 en CPU (~9s vs ~91s por
+  guion) — sigue siendo más lento que Piper (~1.8s), pero la voz ganó.
+  `host/tts.py`'s `Synthesizer` mantiene la misma interfaz
+  (`synthesize(text, wav_path) -> Path`), así que nada río abajo
+  (`VoiceCache`, `render_ads()`) tuvo que cambiar. Detalle completo de
+  la comparación y de la instalación (por qué hace falta el índice
+  CPU-only de PyTorch, el bug de `transformers` en coqui-tts, etc.) en
+  los commits de las ramas spike y en los comentarios del issue #24.
 - **`_mentions_track()` tenía sus propios falsos positivos (2026-08-27).**
   Pablo reportó que 2 de 2 guiones cayeron a plantillas en una corrida
   real; midiendo la tasa de rechazo a mano contra la biblioteca completa,

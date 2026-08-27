@@ -15,7 +15,7 @@ de decisiones en [docs/](docs/).
 - ✅ Fase 1 — Librería musical (scanner, tags, SQLite, CLI)
 - ✅ Fase 2 — Salir al aire (mixer ffmpeg → Icecast)
 - ✅ Fase 3 — Programación (rotación, no-repetición, "sonando ahora")
-- ✅ Fase 4 — El locutor (Piper TTS + guiones LLM con fallback)
+- ✅ Fase 4 — El locutor (Kokoro TTS + guiones LLM con fallback)
 - ✅ Fase 5 — Mezcla de verdad (crossfade, ducking, pre-generación del guion)
 - ✅ Fase 6 — Publicidades falsas (guiones curados + jingle + SFX, rotación)
 - ⏳ Fase 7 — Web — próxima
@@ -30,7 +30,7 @@ de decisiones en [docs/](docs/).
               rotación + no-repetición       guion: Ollama ─fallback▶ plantillas
               bloques horarios                  │
                      │                          ▼
-                     │                       voz: Piper ──▶ cache/ (WAV por hash)
+                     │                       voz: Kokoro ──▶ cache/ (WAV por hash)
                      ▼                          │
               mixer ◀───────────────────────────┘
               Decoder (ffmpeg -re, por pista) ──PCM──▶ Encoder (ffmpeg persistente)
@@ -53,9 +53,9 @@ El loop de `skywave play`, tema a tema:
 2. Se actualiza la tabla **`now_playing`** en SQLite (la futura web lo lee
    de ahí).
 3. **El locutor** escribe un guion corto (Ollama local; si falla o no
-   está, plantillas fijas), lo convierte a voz con **Piper** (es_AR) y lo
-   cachea en `cache/` por hash del texto — el mismo guion nunca se
-   sintetiza dos veces.
+   está, plantillas fijas), lo convierte a voz con **Kokoro** (voz `ef_dora`,
+   español) y lo cachea en `cache/` por hash del texto — el mismo guion
+   nunca se sintetiza dos veces.
 4. **El mixer** decodifica voz y música a PCM crudo (un proceso
    `ffmpeg -re` por pista, a ritmo real). La voz del locutor suena sobre
    el arranque del tema entrante como colchón atenuado (**ducking**, con
@@ -75,13 +75,17 @@ limpia `now_playing` y no deja procesos huérfanos.
 | Python 3.12+ y [`uv`](https://docs.astral.sh/uv/) | todo | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | Docker | Icecast2 | — |
 | `ffmpeg` | mixer (decodificar/codificar) | `sudo apt install ffmpeg` |
-| Voz de Piper (~114MB) | locutor *(opcional)* | `uv run python -m piper.download_voices --download-dir voices es_AR-daniela-high` |
 | [Ollama](https://ollama.com) + modelo (~2GB) | guiones con LLM *(opcional)* | `curl -fsSL https://ollama.com/install.sh \| sh && ollama pull llama3.2:3b` |
 
-Los opcionales degradan con gracia: sin Ollama el locutor usa plantillas
-fijas; sin la voz de Piper la radio sale sin locutor (avisando).
+El modelo de voz de Kokoro (~310MB) se baja solo la primera vez que se
+usa (locutor o `skywave render-ads`) — no hace falta un paso manual, pero
+esa primera vez tarda más (descarga + carga del modelo).
 
-Las dependencias de Python (`mutagen`, `typer`, `piper-tts`, etc.) las
+Los opcionales degradan con gracia: sin Ollama el locutor usa plantillas
+fijas; sin red la primera vez que hace falta bajar la voz, la radio sale
+sin locutor (avisando).
+
+Las dependencias de Python (`mutagen`, `typer`, `kokoro`, etc.) las
 instala `uv` solo la primera vez que corras `uv run`.
 
 ## Puesta en marcha
@@ -181,7 +185,7 @@ en su bitácora dentro de [docs/](docs/).
 - [NumPy](https://numpy.org/doc/) — arrays de PCM (Fase 5: crossfade, ducking)
 
 **El locutor**
-- [Piper](https://github.com/rhasspy/piper) — TTS local
+- [Kokoro](https://github.com/hexgrad/kokoro) — TTS local
 - [Ollama](https://github.com/ollama/ollama/blob/main/docs/api.md) — API
   local de LLM para los guiones
 
