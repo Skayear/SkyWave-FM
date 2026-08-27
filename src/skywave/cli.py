@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
+from skywave.ads.jingle import produce_ad
 from skywave.ads.render import render_ads
 from skywave.host.cache import VoiceCache
 from skywave.host.scripts import OllamaGenerator, ResilientScriptWriter, TemplateGenerator
@@ -105,7 +106,7 @@ def render_ads_command(
         console.print(f"No hay guiones en [bold]{scripts_dir}[/bold] todavía.")
         raise typer.Exit()
 
-    rendered = render_ads(scripts_dir, out_dir, synthesizer.synthesize)
+    rendered = render_ads(scripts_dir, out_dir, synthesizer.synthesize, produce=produce_ad)
     if not rendered:
         console.print(f"Ningún guion [bold].txt[/bold] en [bold]{scripts_dir}[/bold].")
         raise typer.Exit()

@@ -10,9 +10,16 @@ def render_ads(
     scripts_dir: Path,
     out_dir: Path,
     synthesize: Callable[[str, Path], Path],
+    *,
+    produce: Callable[[Path], None] | None = None,
 ) -> list[Path]:
     """Sintetiza cada guion curado a mano en `scripts_dir` (un .txt por
     publicidad) a un WAV en `out_dir`, con el mismo nombre de archivo.
+
+    Si se pasa `produce` (issue #26: jingle.produce_ad), se lo llama con
+    el WAV recién sintetizado para sumarle colchón musical y SFX in situ
+    antes de darlo por terminado — sin `produce`, el WAV queda con la voz
+    sola (comportamiento de la issue #25).
 
     Es un paso manual/offline: se corre cuando se agrega o edita una
     publicidad, no forma parte del loop de la radio en vivo — las
@@ -23,5 +30,8 @@ def render_ads(
     for script_path in sorted(scripts_dir.glob(f"*{_SCRIPT_EXTENSION}")):
         text = script_path.read_text(encoding="utf-8").strip()
         wav_path = out_dir / f"{script_path.stem}.wav"
-        rendered.append(synthesize(text, wav_path))
+        synthesize(text, wav_path)
+        if produce is not None:
+            produce(wav_path)
+        rendered.append(wav_path)
     return rendered
