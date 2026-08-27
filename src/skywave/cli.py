@@ -1,4 +1,6 @@
 import os
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -86,6 +88,21 @@ def _icecast_url(mount: str) -> str:
     return f"icecast://source:{password}@{host}:{port}/{mount}"
 
 
+@dataclass(frozen=True, slots=True)
+class _Prepared:
+    """Un tema ya elegido, con su intervención del locutor lista (guion +
+    WAV sintetizado) para que entre al toque cuando termine el anterior.
+
+    `script`/`wav_path` quedan en None si el locutor está apagado o falló
+    generando/sintetizando — la radio sigue igual, sin voz para ese tema.
+    """
+
+    track: Track
+    script: str | None
+    wav_path: Path | None
+    error: str | None
+
+
 def _build_locutor() -> tuple[ResilientScriptWriter, VoiceCache] | None:
     """Arma el pipeline del locutor (guiones + voz + cache). Si falta la voz
     de Piper, avisa y devuelve None: la radio sale igual, sin locutor."""
@@ -124,56 +141,85 @@ def play(
     icecast_url = _icecast_url(mount)
     console.print(f"Al aire con {len(catalog)} tracks -> [bold]{mount}[/bold] (Ctrl+C para cortar)")
     history: list[Track] = []
-    previous: Track | None = None
+
+    def _prepare_next(previous_track: Track | None) -> _Prepared:
+        """Elige el próximo tema y le arma la intervención (guion + WAV).
+        Corre en el hilo de fondo mientras suena el tema actual — issue
+        #20: para cuando termine ese tema, esta ya está lista y entra sin
+        aire muerto."""
+        track = pick_next(catalog, history, no_repeat_artist=no_repeat_artist)
+        history.append(track)
+        # El historial solo alimenta la ventana de no-repetición: con
+        # quedarnos los últimos temas alcanza, no crece infinito.
+        del history[:-20]
+        if host is None:
+            return _Prepared(track, None, None, None)
+        try:
+            writer, cache = host
+            script = writer.generate(previous_track, track, datetime.now())
+            wav_path = cache.wav_for(script)
+            return _Prepared(track, script, wav_path, None)
+        except Exception as error:
+            # Nada del locutor puede voltear la música: si el guion, la
+            # síntesis o el cache fallan, el tema entra igual (sin voz).
+            return _Prepared(track, None, None, str(error))
+
     # Cola retenida del tema anterior, para fundirla con el arranque del
     # siguiente (crossfade). Si el locutor habla en el medio, se escribe
     # tal cual antes de que arranque el colchón (ducking) del próximo
     # tema: la voz funde con la música entrante, no con la saliente.
     pending_tail = b""
+    # Un solo worker: la preparación del siguiente tema es estrictamente
+    # secuencial (depende del historial que dejó la anterior), no hay nada
+    # que paralelizar entre sí — el paralelismo es contra la música sonando.
+    prep_pool = ThreadPoolExecutor(max_workers=1)
     try:
+        current = _prepare_next(None)
         with Encoder(icecast_url) as encoder:
             while True:
-                track = pick_next(catalog, history, no_repeat_artist=no_repeat_artist)
-                history.append(track)
-                # El historial solo alimenta la ventana de no-repetición:
-                # con quedarnos los últimos temas alcanza, no crece infinito.
-                del history[:-20]
                 with conn:
-                    db.set_now_playing(conn, track)
-                # Nada del locutor puede voltear la música: si el guion, la
-                # síntesis o el cache fallan, el tema entra igual (sin voz).
+                    db.set_now_playing(conn, current.track)
+                # El tema de acá suena en tiempo real (Decoder -re): de
+                # sobra para que este hilo tenga listo el siguiente
+                # guion+WAV antes de que haga falta.
+                next_future = prep_pool.submit(_prepare_next, current.track)
+
+                if current.error is not None:
+                    console.print(
+                        f"[yellow]Locutor falló ({current.error}), sigue la música.[/yellow]"
+                    )
+
                 track_played = False
-                if host is not None:
-                    try:
-                        writer, cache = host
-                        script = writer.generate(previous, track, datetime.now())
-                        console.print(f"🎙 {script}")
-                        if pending_tail:
-                            encoder.write(pending_tail)
-                            pending_tail = b""
-                        console.print(f"♪ {track.artist} — {track.title}")
-                        # La voz suena sobre el arranque de este tema como
-                        # colchón atenuado (ducking) en vez de en seco.
-                        pending_tail = play_ducked(
-                            encoder,
-                            cache.wav_for(script),
-                            track.path,
-                            crossfade_seconds=DEFAULT_CROSSFADE_SECONDS,
-                        )
-                        track_played = True
-                    except Exception as error:
-                        console.print(f"[yellow]Locutor falló ({error}), sigue la música.[/yellow]")
+                if current.script is not None and current.wav_path is not None:
+                    console.print(f"🎙 {current.script}")
+                    if pending_tail:
+                        encoder.write(pending_tail)
+                        pending_tail = b""
+                    console.print(f"♪ {current.track.artist} — {current.track.title}")
+                    # La voz suena sobre el arranque de este tema como
+                    # colchón atenuado (ducking) en vez de en seco.
+                    pending_tail = play_ducked(
+                        encoder,
+                        current.wav_path,
+                        current.track.path,
+                        crossfade_seconds=DEFAULT_CROSSFADE_SECONDS,
+                    )
+                    track_played = True
                 if not track_played:
-                    console.print(f"♪ {track.artist} — {track.title}")
+                    console.print(f"♪ {current.track.artist} — {current.track.title}")
                     pending_tail = play_track(
                         encoder,
-                        track.path,
+                        current.track.path,
                         crossfade_seconds=DEFAULT_CROSSFADE_SECONDS,
                         incoming_tail=pending_tail,
                     )
-                previous = track
+                current = next_future.result()
     except KeyboardInterrupt:
         console.print("\nCortando la radio.")
     finally:
+        # wait=False: no tiene sentido esperar a que termine una preparación
+        # en curso (puede estar en medio del timeout de 30s de Ollama) solo
+        # para tirarla — Ctrl+C corta ya.
+        prep_pool.shutdown(wait=False, cancel_futures=True)
         with conn:
             db.clear_now_playing(conn)
