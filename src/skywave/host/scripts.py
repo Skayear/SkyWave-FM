@@ -70,6 +70,24 @@ def _base_title(title: str) -> str:
     return _BRACKET_SUFFIX.sub("", title).strip()
 
 
+def english_terms_for(ending: Track | None, starting: Track) -> list[str]:
+    """Títulos y artistas a tratar como texto en inglés al sintetizar la
+    voz (host/tts.py fonemiza estos por separado con el motor de inglés,
+    en vez de con el de español como el resto del guion). Mismo
+    tratamiento que `_mentions_track` — sufijo entre corchetes afuera,
+    comillas normalizadas — para calzar con lo que el LLM/las plantillas
+    realmente escriben."""
+    candidates = [starting.title, starting.artist]
+    if ending is not None:
+        candidates += [ending.title, ending.artist]
+    terms: list[str] = []
+    for candidate in candidates:
+        normalized = _base_title(candidate).translate(_QUOTE_NORMALIZE)
+        if normalized and normalized not in terms:
+            terms.append(normalized)
+    return terms
+
+
 def _mentions_track(text: str, track: Track) -> bool:
     """Chequeo mínimo de que el LLM no inventó otro tema: el título real
     (sin el sufijo entre corchetes, si tiene, y con las comillas

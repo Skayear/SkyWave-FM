@@ -7,6 +7,7 @@ from skywave.host.scripts import (
     TemplateGenerator,
     _base_title,
     _mentions_track,
+    english_terms_for,
 )
 from skywave.library.track import Track
 
@@ -98,6 +99,30 @@ def test_mentions_track_normaliza_comillas_tipograficas() -> None:
     # nombres de archivo de Apple Music/iTunes) pero el LLM escribe con
     # apóstrofo recto normal — mismo texto para un oído humano.
     assert _mentions_track('A continuación, "Ridin\' the Storm Out" de REO Speedwagon', RIDIN)
+
+
+def test_english_terms_for_incluye_titulo_y_artista_del_entrante() -> None:
+    assert english_terms_for(None, QUEEN) == ["Brighton Rock", "Queen"]
+
+
+def test_english_terms_for_incluye_tambien_el_saliente() -> None:
+    terms = english_terms_for(QUEEN, MECHANIX_REMIX)
+
+    assert "Mechanix" in terms  # sin el sufijo entre corchetes
+    assert "Megadeth" in terms
+    assert "Brighton Rock" in terms
+    assert "Queen" in terms
+
+
+def test_english_terms_for_normaliza_comillas_y_no_duplica() -> None:
+    # RIDIN tiene comilla curva en el título; el artista repite "REO
+    # Speedwagon The Hits" completo -- no hay título/artista duplicado
+    # entre saliente y entrante en este caso, pero el mismo string no
+    # debería aparecer dos veces si ending == starting.
+    terms = english_terms_for(RIDIN, RIDIN)
+
+    assert terms.count("REO Speedwagon The Hits") == 1
+    assert "Ridin' the Storm Out" in terms  # comilla recta, no curva
 
 
 def test_template_generator_cumple_la_interfaz() -> None:

@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -12,9 +13,11 @@ class FakeSynth:
     def __init__(self, fail: bool = False) -> None:
         self.calls = 0
         self.fail = fail
+        self.last_english_terms: Sequence[str] | None = None
 
-    def __call__(self, text: str, wav_path: Path) -> Path:
+    def __call__(self, text: str, wav_path: Path, english_terms: Sequence[str] = ()) -> Path:
         self.calls += 1
+        self.last_english_terms = english_terms
         if self.fail:
             raise RuntimeError("síntesis rota")
         wav_path.parent.mkdir(parents=True, exist_ok=True)
@@ -74,3 +77,12 @@ def test_sintesis_rota_no_deja_archivo_corrupto_cacheado(tmp_path: Path) -> None
     cache_sano.wav_for("Hola radio")
 
     assert sano.calls == 1
+
+
+def test_english_terms_se_pasa_a_la_sintesis(tmp_path: Path) -> None:
+    synth = FakeSynth()
+    cache = VoiceCache(synth, voice_id="daniela", cache_dir=tmp_path)
+
+    cache.wav_for("Ahora suena Keep On Loving You", english_terms=["Keep On Loving You"])
+
+    assert synth.last_english_terms == ["Keep On Loving You"]

@@ -12,7 +12,12 @@ from rich.table import Table
 from skywave.ads.jingle import produce_ad
 from skywave.ads.render import list_ads, render_ads
 from skywave.host.cache import VoiceCache
-from skywave.host.scripts import OllamaGenerator, ResilientScriptWriter, TemplateGenerator
+from skywave.host.scripts import (
+    OllamaGenerator,
+    ResilientScriptWriter,
+    TemplateGenerator,
+    english_terms_for,
+)
 from skywave.host.tts import DEFAULT_VOICE, Synthesizer
 from skywave.library import db
 from skywave.library.scanner import find_audio_files
@@ -212,7 +217,10 @@ def play(
         try:
             writer, cache = host
             script = writer.generate(previous_track, track, datetime.now())
-            wav_path = cache.wav_for(script)
+            # Títulos/artistas se fonemizan con el motor de inglés en vez
+            # del de español (host/tts.py) para que se pronuncien bien.
+            english_terms = english_terms_for(previous_track, track)
+            wav_path = cache.wav_for(script, english_terms=english_terms)
             return _Prepared(track, script, wav_path, None)
         except Exception as error:
             # Nada del locutor puede voltear la música: si el guion, la
