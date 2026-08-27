@@ -2,7 +2,7 @@ import random
 from datetime import datetime
 from pathlib import Path
 
-from skywave.host.scripts import ResilientScriptWriter, TemplateGenerator
+from skywave.host.scripts import ResilientScriptWriter, TemplateGenerator, _mentions_track
 from skywave.library.track import Track
 
 TARDE = datetime(2026, 8, 26, 15, 0)
@@ -46,6 +46,16 @@ def test_sin_primario_va_directo_a_plantillas() -> None:
     script = writer.generate(None, QUEEN, TARDE)
 
     assert "Brighton Rock" in script
+
+
+def test_mentions_track_encuentra_el_titulo_sin_importar_mayusculas() -> None:
+    assert _mentions_track("Ahora escuchamos BRIGHTON ROCK de Queen", QUEEN)
+
+
+def test_mentions_track_detecta_un_tema_inventado() -> None:
+    # Caso real: el LLM alucinó "El Amante" de Juan Luis Guerra en vez del
+    # tema real que se le pasó en el prompt.
+    assert not _mentions_track("Ahora un clásico: El Amante de Juan Luis Guerra", QUEEN)
 
 
 def test_template_generator_cumple_la_interfaz() -> None:

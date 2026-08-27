@@ -38,6 +38,8 @@ def _prompt(ending: Track | None, starting: Track, now: datetime) -> str:
         "Escribí UNA intervención breve (una o dos oraciones) para decir al aire entre dos temas.",
         "Sin emojis, sin comillas alrededor, sin explicaciones: solo lo que dice el locutor.",
         "No inventes datos, películas ni anécdotas: usá solo la información de acá abajo.",
+        "El título y el artista de acá abajo son datos reales: repetilos tal cual están "
+        "escritos, no los cambies por otro tema o artista que conozcas de antes.",
         f"Hora actual: {now.strftime('%H:%M')}.",
     ]
     if ending is not None:
@@ -45,6 +47,15 @@ def _prompt(ending: Track | None, starting: Track, now: datetime) -> str:
     extra = f" (año {starting.year})" if starting.year else ""
     lines.append(f"Ahora empieza: «{starting.title}» de {starting.artist}{extra}.")
     return "\n".join(lines)
+
+
+def _mentions_track(text: str, track: Track) -> bool:
+    """Chequeo mínimo de que el LLM no inventó otro tema: el título real
+    tiene que aparecer en el texto, aunque sea como substring. No alcanza
+    con pedirle en el prompt que no invente — modelos chicos como el 3B a
+    veces igual cambian el título por otro que "conocen", así que esto es
+    la red de seguridad real: si no lo menciona, se descarta el guion."""
+    return track.title.lower() in text.lower()
 
 
 class OllamaGenerator:
@@ -85,6 +96,8 @@ class OllamaGenerator:
         text = data.get("response", "").strip().strip('"').strip()
         if not text:
             raise ValueError("Ollama devolvió un guion vacío")
+        if not _mentions_track(text, starting):
+            raise ValueError(f"Ollama inventó otro tema en vez de {starting.title!r}: {text!r}")
         return text
 
 
