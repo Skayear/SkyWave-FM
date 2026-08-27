@@ -1,4 +1,10 @@
-from skywave.mixer.player import _crossfade, _take, crossfade_window_bytes
+from skywave.mixer.player import (
+    _crossfade,
+    _duck_envelope,
+    _duck_mix,
+    _take,
+    crossfade_window_bytes,
+)
 
 
 def test_crossfade_window_bytes_ida_y_vuelta() -> None:
@@ -48,3 +54,44 @@ def test_crossfade_usa_el_largo_menor_cuando_difieren() -> None:
     result = _crossfade(tail, head)
 
     assert len(result) == len(head)
+
+
+def test_duck_envelope_baja_sostiene_y_sube() -> None:
+    envelope = _duck_envelope(10, duck_gain=0.25, ramp_frames=2)
+
+    assert len(envelope) == 10
+    assert envelope[0] == 1.0  # arranca a volumen pleno
+    assert list(envelope[2:8]) == [0.25] * 6  # sostiene atenuado en el medio
+    assert envelope[-1] == 1.0  # termina a volumen pleno
+
+
+def test_duck_envelope_recorta_las_rampas_si_el_segmento_es_corto() -> None:
+    # Con ramp_frames=100 pero solo 4 frames, no puede haber "sostenido":
+    # la mitad baja, la mitad sube, sin que se pisen.
+    envelope = _duck_envelope(4, duck_gain=0.25, ramp_frames=100)
+
+    assert len(envelope) == 4
+
+
+def test_duck_mix_atenua_la_musica_bajo_la_voz() -> None:
+    frame = (1000).to_bytes(2, "little", signed=True) * 2  # 1 frame estéreo
+    speech = frame * 4
+    music = frame * 4
+
+    result = _duck_mix(speech, music, duck_gain=0.25, ramp_seconds=0.0)
+
+    assert len(result) == len(speech)
+    # Sin rampa (ramp_seconds=0), el colchón entero está atenuado a 0.25:
+    # voz (1000) + música*0.25 (250) = 1250 en cada muestra.
+    first_sample = int.from_bytes(result[0:2], "little", signed=True)
+    assert first_sample == 1250
+
+
+def test_duck_mix_usa_el_largo_menor_cuando_difieren() -> None:
+    frame = (1000).to_bytes(2, "little", signed=True) * 2
+    speech = frame * 5
+    music = frame * 2
+
+    result = _duck_mix(speech, music, duck_gain=0.25, ramp_seconds=0.0)
+
+    assert len(result) == len(music)

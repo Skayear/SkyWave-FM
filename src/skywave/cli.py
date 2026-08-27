@@ -15,7 +15,7 @@ from skywave.library.scanner import find_audio_files
 from skywave.library.tags import read_tags
 from skywave.library.track import Track
 from skywave.mixer.encoder import Encoder
-from skywave.mixer.player import DEFAULT_CROSSFADE_SECONDS, play_track
+from skywave.mixer.player import DEFAULT_CROSSFADE_SECONDS, play_ducked, play_track
 from skywave.scheduler.selector import pick_next
 
 app = typer.Typer()
@@ -126,9 +126,9 @@ def play(
     history: list[Track] = []
     previous: Track | None = None
     # Cola retenida del tema anterior, para fundirla con el arranque del
-    # siguiente (crossfade) en vez de cortar en seco. Si el locutor habla
-    # en el medio, se descarta tal cual (fundir música con voz es ducking,
-    # issue #23, no esto) — el locutor ya es la transición.
+    # siguiente (crossfade). Si el locutor habla en el medio, se escribe
+    # tal cual antes de que arranque el colchón (ducking) del próximo
+    # tema: la voz funde con la música entrante, no con la saliente.
     pending_tail = b""
     try:
         with Encoder(icecast_url) as encoder:
@@ -140,9 +140,10 @@ def play(
                 del history[:-20]
                 with conn:
                     db.set_now_playing(conn, track)
+                # Nada del locutor puede voltear la música: si el guion, la
+                # síntesis o el cache fallan, el tema entra igual (sin voz).
+                track_played = False
                 if host is not None:
-                    # Nada del locutor puede voltear la música: si el guion,
-                    # la síntesis o el cache fallan, el tema entra igual.
                     try:
                         writer, cache = host
                         script = writer.generate(previous, track, datetime.now())
@@ -150,16 +151,26 @@ def play(
                         if pending_tail:
                             encoder.write(pending_tail)
                             pending_tail = b""
-                        play_track(encoder, cache.wav_for(script))
+                        console.print(f"♪ {track.artist} — {track.title}")
+                        # La voz suena sobre el arranque de este tema como
+                        # colchón atenuado (ducking) en vez de en seco.
+                        pending_tail = play_ducked(
+                            encoder,
+                            cache.wav_for(script),
+                            track.path,
+                            crossfade_seconds=DEFAULT_CROSSFADE_SECONDS,
+                        )
+                        track_played = True
                     except Exception as error:
                         console.print(f"[yellow]Locutor falló ({error}), sigue la música.[/yellow]")
-                console.print(f"♪ {track.artist} — {track.title}")
-                pending_tail = play_track(
-                    encoder,
-                    track.path,
-                    crossfade_seconds=DEFAULT_CROSSFADE_SECONDS,
-                    incoming_tail=pending_tail,
-                )
+                if not track_played:
+                    console.print(f"♪ {track.artist} — {track.title}")
+                    pending_tail = play_track(
+                        encoder,
+                        track.path,
+                        crossfade_seconds=DEFAULT_CROSSFADE_SECONDS,
+                        incoming_tail=pending_tail,
+                    )
                 previous = track
     except KeyboardInterrupt:
         console.print("\nCortando la radio.")

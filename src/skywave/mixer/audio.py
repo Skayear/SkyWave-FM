@@ -38,15 +38,19 @@ def mix(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 def fade_in(samples: np.ndarray) -> np.ndarray:
     """Aplica una rampa lineal de 0 a 1 a lo largo de toda la señal."""
-    return _apply_ramp(samples, start=0.0, end=1.0)
+    return apply_envelope(samples, np.linspace(0.0, 1.0, num=len(samples)))
 
 
 def fade_out(samples: np.ndarray) -> np.ndarray:
     """Aplica una rampa lineal de 1 a 0 a lo largo de toda la señal."""
-    return _apply_ramp(samples, start=1.0, end=0.0)
+    return apply_envelope(samples, np.linspace(1.0, 0.0, num=len(samples)))
 
 
-def _apply_ramp(samples: np.ndarray, *, start: float, end: float) -> np.ndarray:
-    envelope = np.linspace(start, end, num=len(samples))[:, np.newaxis]
-    scaled = samples.astype(np.float64) * envelope
+def apply_envelope(samples: np.ndarray, envelope: np.ndarray) -> np.ndarray:
+    """Escala cada frame por su propio factor en `envelope` (un valor por
+    frame, mismo largo que `samples`). Generalización de `apply_gain` para
+    rampas no constantes: fades de dos puntos (`fade_in`/`fade_out`) o
+    envolventes de varios tramos como el ducking (baja-sostiene-sube).
+    """
+    scaled = samples.astype(np.float64) * envelope[:, np.newaxis]
     return np.clip(scaled, np.iinfo(np.int16).min, np.iinfo(np.int16).max).astype(np.int16)
