@@ -15,7 +15,7 @@ from skywave.library.scanner import find_audio_files
 from skywave.library.tags import read_tags
 from skywave.library.track import Track
 from skywave.mixer.encoder import Encoder
-from skywave.mixer.player import play_track
+from skywave.mixer.player import DEFAULT_CROSSFADE_SECONDS, play_track
 from skywave.scheduler.selector import pick_next
 
 app = typer.Typer()
@@ -125,6 +125,11 @@ def play(
     console.print(f"Al aire con {len(catalog)} tracks -> [bold]{mount}[/bold] (Ctrl+C para cortar)")
     history: list[Track] = []
     previous: Track | None = None
+    # Cola retenida del tema anterior, para fundirla con el arranque del
+    # siguiente (crossfade) en vez de cortar en seco. Si el locutor habla
+    # en el medio, se descarta tal cual (fundir música con voz es ducking,
+    # issue #23, no esto) — el locutor ya es la transición.
+    pending_tail = b""
     try:
         with Encoder(icecast_url) as encoder:
             while True:
@@ -142,11 +147,19 @@ def play(
                         writer, cache = host
                         script = writer.generate(previous, track, datetime.now())
                         console.print(f"🎙 {script}")
+                        if pending_tail:
+                            encoder.write(pending_tail)
+                            pending_tail = b""
                         play_track(encoder, cache.wav_for(script))
                     except Exception as error:
                         console.print(f"[yellow]Locutor falló ({error}), sigue la música.[/yellow]")
                 console.print(f"♪ {track.artist} — {track.title}")
-                play_track(encoder, track.path)
+                pending_tail = play_track(
+                    encoder,
+                    track.path,
+                    crossfade_seconds=DEFAULT_CROSSFADE_SECONDS,
+                    incoming_tail=pending_tail,
+                )
                 previous = track
     except KeyboardInterrupt:
         console.print("\nCortando la radio.")
