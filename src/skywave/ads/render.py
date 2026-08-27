@@ -35,3 +35,12 @@ def render_ads(
             produce(wav_path)
         rendered.append(wav_path)
     return rendered
+
+
+def list_ads(ads_dir: Path) -> list[Path]:
+    """Publicidades ya renderizadas en `ads_dir`, para que el scheduler
+    (issue #27) elija entre ellas. Solo `.wav` — no incluye `scripts/`
+    (los guiones curados) ni nada que no sea un WAV ya producido."""
+    if not ads_dir.exists():
+        return []
+    return sorted(ads_dir.glob("*.wav"))

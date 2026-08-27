@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from skywave.ads.render import render_ads
+from skywave.ads.render import list_ads, render_ads
 
 
 class FakeSynth:
@@ -76,3 +76,21 @@ def test_render_ads_crea_out_dir_si_no_existe(tmp_path: Path) -> None:
     render_ads(scripts_dir, out_dir, FakeSynth())
 
     assert out_dir.is_dir()
+
+
+def test_list_ads_encuentra_solo_los_wav(tmp_path: Path) -> None:
+    (tmp_path / "mate-turbo.wav").write_bytes(b"")
+    (tmp_path / "seguro-el-zorro.wav").write_bytes(b"")
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    (scripts_dir / "mate-turbo.txt").write_text("no es un wav")
+
+    ads = list_ads(tmp_path)
+
+    assert [p.name for p in ads] == ["mate-turbo.wav", "seguro-el-zorro.wav"]
+
+
+def test_list_ads_carpeta_inexistente_devuelve_vacio(tmp_path: Path) -> None:
+    ads = list_ads(tmp_path / "no-existe")
+
+    assert ads == []
