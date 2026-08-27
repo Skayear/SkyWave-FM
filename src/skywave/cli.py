@@ -44,7 +44,7 @@ def scan(
     encontrados = 0
     with conn:
         for path in find_audio_files(carpeta):
-            track = Track.from_tags(path, read_tags(path))
+            track = Track.from_tags(path, read_tags(path), root=carpeta)
             db.upsert_track(conn, track)
             encontrados += 1
     console.print(f"{encontrados} tracks escaneados en [bold]{db_path}[/bold]")
