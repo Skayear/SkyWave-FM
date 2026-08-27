@@ -2,7 +2,12 @@ import random
 from datetime import datetime
 from pathlib import Path
 
-from skywave.host.scripts import ResilientScriptWriter, TemplateGenerator, _mentions_track
+from skywave.host.scripts import (
+    ResilientScriptWriter,
+    TemplateGenerator,
+    _base_title,
+    _mentions_track,
+)
 from skywave.library.track import Track
 
 TARDE = datetime(2026, 8, 26, 15, 0)
@@ -13,6 +18,22 @@ QUEEN = Track(
     album=None,
     year=1974,
     duration_seconds=311.0,
+)
+MECHANIX_REMIX = Track(
+    path=Path("/music/Megadeth/Mechanix [2002 Remix].flac"),
+    artist="Megadeth",
+    title="Mechanix [2002 Remix]",
+    album=None,
+    year=2002,
+    duration_seconds=280.0,
+)
+RIDIN = Track(
+    path=Path("/music/REO Speedwagon The Hits/Ridin’ the Storm Out.wav"),
+    artist="REO Speedwagon The Hits",
+    title="Ridin’ the Storm Out",
+    album=None,
+    year=None,
+    duration_seconds=260.0,
 )
 
 
@@ -56,6 +77,27 @@ def test_mentions_track_detecta_un_tema_inventado() -> None:
     # Caso real: el LLM alucinó "El Amante" de Juan Luis Guerra en vez del
     # tema real que se le pasó en el prompt.
     assert not _mentions_track("Ahora un clásico: El Amante de Juan Luis Guerra", QUEEN)
+
+
+def test_mentions_track_ignora_el_sufijo_entre_corchetes() -> None:
+    # Caso real: el LLM dijo "la versión remezclada de 'Mechanix'" — dato
+    # correcto, pero nadie dice "corchete 2002 remix corchete" al aire.
+    assert _mentions_track("la versión remezclada de 'Mechanix' de Megadeth", MECHANIX_REMIX)
+
+
+def test_base_title_saca_el_sufijo_entre_corchetes() -> None:
+    assert _base_title("Mechanix [2002 Remix]") == "Mechanix"
+
+
+def test_base_title_sin_corchetes_no_cambia() -> None:
+    assert _base_title("Brighton Rock") == "Brighton Rock"
+
+
+def test_mentions_track_normaliza_comillas_tipograficas() -> None:
+    # Caso real: el título viene con comilla curva (U+2019, típico de
+    # nombres de archivo de Apple Music/iTunes) pero el LLM escribe con
+    # apóstrofo recto normal — mismo texto para un oído humano.
+    assert _mentions_track('A continuación, "Ridin\' the Storm Out" de REO Speedwagon', RIDIN)
 
 
 def test_template_generator_cumple_la_interfaz() -> None:
