@@ -108,6 +108,17 @@ pipeline de voz se reporta y el tema entra igual.
   `scripts/render-icecast-config.sh`. La pre-generación del issue #20
   también resuelve esto de raíz (el encoder nunca queda esperando), pero
   el timeout más alto es la red de seguridad mientras tanto.
+- **Alucinación real al aire, encontrada por Pablo después de cerrar la
+  fase (2026-08-27).** El guion decía "El Amante" de Juan Luis Guerra
+  mientras sonaba "Keep On Loving You" de REO Speedwagon: `llama3.2:3b`
+  inventó un tema completamente distinto pese a tener el título y artista
+  reales en el prompt — la instrucción de "no inventes" (agregada cuando
+  se detectó que inventaba anécdotas, más arriba) no alcanza como garantía
+  con un modelo tan chico. Se corrigió reforzando el prompt y agregando
+  `_mentions_track()` en `host/scripts.py`: valida que el título real
+  aparezca en el texto generado, y si no, lo descarta como inválido —
+  `ResilientScriptWriter` cae a plantillas, el mismo mecanismo que ya
+  existía para Ollama caído o con timeout.
 
 ## Para estudiar antes de Fase 5
 
