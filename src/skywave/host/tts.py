@@ -1,3 +1,4 @@
+import re
 import warnings
 from pathlib import Path
 
@@ -16,6 +17,19 @@ DEFAULT_LANG_CODE = "e"  # español
 DEFAULT_VOICE = "ef_dora"
 _REPO_ID = "hexgrad/Kokoro-82M"
 _SAMPLE_RATE = 24000
+
+# Kokoro parte el texto en fragmentos por cada salto de línea (su
+# `split_pattern` default es r'\n+') y sintetiza cada uno por separado sin
+# silencio entre medio al pegarlos — un guion guardado en un .txt con
+# saltos de línea "de lectura" (para que no queden líneas eternas en el
+# archivo) suena cortado en lugares que no tienen nada que ver con la
+# puntuación real. Colapsar los saltos de línea a espacios antes de
+# sintetizar evita ese corte.
+_WHITESPACE = re.compile(r"\s+")
+
+
+def _normalize_text(text: str) -> str:
+    return _WHITESPACE.sub(" ", text).strip()
 
 
 class Synthesizer:
@@ -47,6 +61,7 @@ class Synthesizer:
 
     def synthesize(self, text: str, wav_path: Path) -> Path:
         wav_path.parent.mkdir(parents=True, exist_ok=True)
+        text = _normalize_text(text)
         chunks = [audio for _, _, audio in self._pipeline(text, voice=self._voice)]
         audio = np.concatenate(chunks)
         sf.write(str(wav_path), audio, _SAMPLE_RATE)
