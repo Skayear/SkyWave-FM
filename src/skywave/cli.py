@@ -101,7 +101,7 @@ def render_ads_command(
     try:
         synthesizer = Synthesizer()
     except FileNotFoundError as error:
-        console.print(f"[bold red]Sin voz de Piper:[/bold red] {error}")
+        console.print(f"[bold red]Sin voz para el locutor:[/bold red] {error}")
         raise typer.Exit(code=1) from error
 
     if not scripts_dir.exists():
@@ -147,15 +147,16 @@ def _ad_display_name(ad_path: Path) -> str:
 
 
 def _build_locutor() -> tuple[ResilientScriptWriter, VoiceCache] | None:
-    """Arma el pipeline del locutor (guiones + voz + cache). Si falta la voz
-    de Piper, avisa y devuelve None: la radio sale igual, sin locutor."""
+    """Arma el pipeline del locutor (guiones + voz + cache). Si no se pudo
+    cargar la voz (sin red la primera vez, por ejemplo), avisa y devuelve
+    None: la radio sale igual, sin locutor."""
     try:
         synthesizer = Synthesizer()
     except FileNotFoundError as error:
         console.print(f"[yellow]Sin locutor:[/yellow] {error}")
         return None
     writer = ResilientScriptWriter(OllamaGenerator(), TemplateGenerator())
-    cache = VoiceCache(synthesizer.synthesize, voice_id=DEFAULT_VOICE.stem)
+    cache = VoiceCache(synthesizer.synthesize, voice_id=DEFAULT_VOICE)
     return writer, cache
 
 

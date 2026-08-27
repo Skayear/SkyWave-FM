@@ -90,8 +90,8 @@ def produce_ad(voice_wav_path: Path) -> None:
 
     Decodifica la voz con el `Decoder` del mixer en vez de leer el WAV a
     mano: normaliza a PCM s16le/44100Hz/estéreo igual que el resto del
-    proyecto, sin importar el formato nativo de la voz de Piper (22050Hz
-    mono).
+    proyecto, sin importar el formato nativo de la voz (24000Hz mono con
+    Kokoro).
     """
     voice = b"".join(Decoder(voice_wav_path).chunks())
     voice_samples = bytes_to_samples(voice)
