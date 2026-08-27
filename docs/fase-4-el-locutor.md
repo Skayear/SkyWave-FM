@@ -148,6 +148,32 @@ pipeline de voz se reporta y el tema entra igual.
   "Here Is the News" en particular parece confundirlo sistemáticamente
   (el título suena a instrucción). Se acepta ese piso: lo que sale al
   aire nunca miente, aunque a veces sea una plantilla en vez del LLM.
+- **Pausas rotas por saltos de línea, encontrado por Pablo (2026-08-27).**
+  Kokoro parte el texto en fragmentos por cada `\n` (su `split_pattern`
+  default) y sintetiza cada uno por separado, pegándolos después sin
+  silencio entre medio. Los `.txt` de publicidades de Fase 6 están
+  escritos con saltos de línea "de lectura" (ajustados a ~70 caracteres
+  para que el archivo no tenga líneas eternas) — Kokoro los tomaba como
+  cortes de oración reales, y el resultado sonaba cortado en lugares
+  arbitrarios. `Synthesizer.synthesize()` ahora normaliza el texto
+  (colapsa cualquier corrida de espacios/saltos de línea a uno solo)
+  antes de sintetizar.
+- **Títulos/artistas en inglés mal pronunciados, mismo pedido de Pablo
+  (2026-08-27).** Con voz en español, Kokoro fonemiza todo el texto con
+  reglas de español — el motor (`misaki`) tiene desactivada la detección
+  automática de idioma extranjero de espeak-ng
+  (`language_switch='remove-flags'`). Investigando el código de `misaki`
+  se confirmó que los alfabetos fonéticos de español e inglés son
+  compatibles (ambos IPA), así que se puede fonemizar el título/artista
+  aparte con el motor de inglés (`misaki.en.G2P`) y empalmarlo a mano en
+  la cadena de fonemas en español antes de sintetizar con
+  `KPipeline.generate_from_tokens()`. Implementado en
+  `Synthesizer.synthesize(..., english_terms=[...])`, con
+  `english_terms_for()` en `host/scripts.py` armando la lista a partir
+  de los `Track` reales (mismo tratamiento de corchetes/comillas que
+  `_mentions_track`). Si el guion es muy largo para el límite del modelo
+  (510 caracteres de fonemas), cae a la síntesis normal en vez de perder
+  la intervención entera.
 
 ## Para estudiar antes de Fase 5
 
