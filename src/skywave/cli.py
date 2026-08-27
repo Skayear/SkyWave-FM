@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.table import Table
 
 from skywave.ads.jingle import produce_ad
-from skywave.ads.render import render_ads
+from skywave.ads.render import list_ads, render_ads
 from skywave.host.cache import VoiceCache
 from skywave.host.scripts import OllamaGenerator, ResilientScriptWriter, TemplateGenerator
 from skywave.host.tts import DEFAULT_VOICE, Synthesizer
@@ -20,6 +20,7 @@ from skywave.library.tags import read_tags
 from skywave.library.track import Track
 from skywave.mixer.encoder import Encoder
 from skywave.mixer.player import DEFAULT_CROSSFADE_SECONDS, play_ducked, play_track
+from skywave.scheduler.ads import pick_next_ad, should_play_ad
 from skywave.scheduler.selector import pick_next
 
 app = typer.Typer()
@@ -40,6 +41,7 @@ _AdsScriptsDirOption = typer.Option(
 _AdsOutDirOption = typer.Option(
     Path("assets/ads"), "--out-dir", help="Carpeta donde se escriben los WAV renderizados."
 )
+DEFAULT_ADS_DIR = Path("assets/ads")
 
 
 @app.command()
@@ -139,6 +141,11 @@ class _Prepared:
     error: str | None
 
 
+def _ad_display_name(ad_path: Path) -> str:
+    """ "mate-turbo.wav" -> "Mate Turbo", para la consola."""
+    return ad_path.stem.replace("-", " ").replace("_", " ").title()
+
+
 def _build_locutor() -> tuple[ResilientScriptWriter, VoiceCache] | None:
     """Arma el pipeline del locutor (guiones + voz + cache). Si falta la voz
     de Piper, avisa y devuelve None: la radio sale igual, sin locutor."""
@@ -162,6 +169,12 @@ def play(
     locutor: bool = typer.Option(
         True, "--locutor/--sin-locutor", help="Presentar los temas con voz entre tema y tema."
     ),
+    publicidades: bool = typer.Option(
+        True, "--publicidades/--sin-publicidades", help="Intercalar publicidades entre temas."
+    ),
+    ads_every: int = typer.Option(
+        8, "--ads-every", help="Cada cuántos temas suena una publicidad."
+    ),
 ) -> None:
     """Sale al aire en modo radio: suena indefinidamente hasta Ctrl+C."""
     conn = db.connect(db_path)
@@ -174,6 +187,11 @@ def play(
         raise typer.Exit()
 
     host = _build_locutor() if locutor else None
+    # Publicidades pre-renderizadas (issue #25/#26): si no hay ninguna
+    # (todavía no se corrió `skywave render-ads`), la radio sigue igual,
+    # sin publicidades — mismo principio de siempre, nunca se queda muda
+    # por falta de una pieza opcional.
+    ads = list_ads(DEFAULT_ADS_DIR) if publicidades else []
     icecast_url = _icecast_url(mount)
     console.print(f"Al aire con {len(catalog)} tracks -> [bold]{mount}[/bold] (Ctrl+C para cortar)")
     history: list[Track] = []
@@ -209,6 +227,8 @@ def play(
     # secuencial (depende del historial que dejó la anterior), no hay nada
     # que paralelizar entre sí — el paralelismo es contra la música sonando.
     prep_pool = ThreadPoolExecutor(max_workers=1)
+    tracks_since_ad = 0
+    ad_history: list[Path] = []
     try:
         current = _prepare_next(None)
         with Encoder(icecast_url) as encoder:
@@ -249,6 +269,27 @@ def play(
                         crossfade_seconds=DEFAULT_CROSSFADE_SECONDS,
                         incoming_tail=pending_tail,
                     )
+
+                tracks_since_ad += 1
+                if ads and should_play_ad(tracks_since_ad, every=ads_every):
+                    tracks_since_ad = 0
+                    ad_path = pick_next_ad(ads, ad_history)
+                    ad_history.append(ad_path)
+                    del ad_history[:-5]
+                    # now_playing NO se toca acá a propósito: sigue
+                    # reflejando el último tema real. Una publicidad dura
+                    # segundos y no es "programación" — la futura web de
+                    # Fase 7 no necesita saber que hay una sonando, solo
+                    # qué tema sigue en pie.
+                    if pending_tail:
+                        # La publicidad ya viene con sus propios fades
+                        # (issue #26): no se funde con la cola del tema,
+                        # se escribe tal cual y arranca la publicidad limpia.
+                        encoder.write(pending_tail)
+                        pending_tail = b""
+                    console.print(f"📢 {_ad_display_name(ad_path)}")
+                    play_track(encoder, ad_path)
+
                 current = next_future.result()
     except KeyboardInterrupt:
         console.print("\nCortando la radio.")
