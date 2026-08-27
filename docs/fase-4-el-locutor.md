@@ -119,6 +119,23 @@ pipeline de voz se reporta y el tema entra igual.
   aparezca en el texto generado, y si no, lo descarta como inválido —
   `ResilientScriptWriter` cae a plantillas, el mismo mecanismo que ya
   existía para Ollama caído o con timeout.
+- **`_mentions_track()` tenía sus propios falsos positivos (2026-08-27).**
+  Pablo reportó que 2 de 2 guiones cayeron a plantillas en una corrida
+  real; midiendo la tasa de rechazo a mano contra la biblioteca completa,
+  buena parte no eran alucinaciones sino la validación siendo demasiado
+  estricta: (1) títulos con sufijo entre corchetes ("Mechanix [2002
+  Remix]") — el LLM decía correctamente "la versión remezclada de
+  'Mechanix'" pero se exigía el corchete literal, que nadie dice en voz
+  alta; (2) comillas tipográficas — títulos de nombres de archivo estilo
+  Apple Music usan comilla curva ("Ridin’ the Storm Out", U+2019) pero el
+  LLM escribe con apóstrofo recto, mismo texto para un oído humano pero
+  distinto para un substring exacto. Con `_base_title()` y
+  `_QUOTE_NORMALIZE` arreglando ambos, y `temperature` bajada de 0.9 a
+  0.6 (medido: ~35%→~25% de rechazo genuino, misma semilla de prueba), la
+  tasa de alucinación real que queda es el piso de un modelo de 3B —
+  "Here Is the News" en particular parece confundirlo sistemáticamente
+  (el título suena a instrucción). Se acepta ese piso: lo que sale al
+  aire nunca miente, aunque a veces sea una plantilla en vez del LLM.
 
 ## Para estudiar antes de Fase 5
 
