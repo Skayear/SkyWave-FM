@@ -92,8 +92,11 @@ Trabajamos fase por fase. No adelantes fases sin que yo lo pida.
 - [x] **Fase 4 — El locutor:** wrapper de Piper, cache en disco por hash,
       generador de guiones con LLM (metadata + hora + qué viene después),
       plantillas de fallback. *Aprendo: APIs, cache, manejo de errores.*
-- [ ] **Fase 5 — Mezcla de verdad:** crossfade, ducking, colchón musical bajo
-      la voz. *Aprendo: numpy, audio básico.*
+- [x] **Fase 5 — Mezcla de verdad:** crossfade, ducking, colchón musical bajo
+      la voz, pre-generación del guion en un hilo de fondo. *Aprendo: numpy,
+      audio básico, threading con resultados.* (Mecánica y pipeline
+      probados a mano con Icecast+Ollama+Piper; falta la confirmación
+      auditiva final de Pablo — ver docs/fase-5-mezcla-de-verdad.md.)
 - [ ] **Fase 6 — Publicidades falsas:** guiones curados + jingle + SFX,
       insertadas en la rotación.
 - [ ] **Fase 7 — Web:** FastAPI, reproductor, text box de saludos, moderación

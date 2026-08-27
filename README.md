@@ -16,7 +16,8 @@ de decisiones en [docs/](docs/).
 - ✅ Fase 2 — Salir al aire (mixer ffmpeg → Icecast)
 - ✅ Fase 3 — Programación (rotación, no-repetición, "sonando ahora")
 - ✅ Fase 4 — El locutor (Piper TTS + guiones LLM con fallback)
-- ⏳ Fase 5 — Mezcla de verdad (crossfade, ducking) — próxima
+- ✅ Fase 5 — Mezcla de verdad (crossfade, ducking, pre-generación del guion)
+- ⏳ Fase 6 — Publicidades falsas — próxima
 
 ## Cómo funciona
 
@@ -44,7 +45,10 @@ El loop de `skywave play`, tema a tema:
 1. **El scheduler elige** la próxima pista al azar entre las que su artista
    no sonó en los últimos N temas (regla que se relaja sola si la
    biblioteca es chica — la radio nunca se queda muda). De madrugada
-   prefiere temas cortos.
+   prefiere temas cortos. Esta elección pasa en **un hilo de fondo**
+   mientras suena el tema actual, junto con el guion y la voz del punto
+   siguiente — para cuando el tema termina, la próxima intervención ya
+   está lista (nada de aire muerto generando en vivo).
 2. Se actualiza la tabla **`now_playing`** en SQLite (la futura web lo lee
    de ahí).
 3. **El locutor** escribe un guion corto (Ollama local; si falla o no
@@ -52,7 +56,11 @@ El loop de `skywave play`, tema a tema:
    cachea en `cache/` por hash del texto — el mismo guion nunca se
    sintetiza dos veces.
 4. **El mixer** decodifica voz y música a PCM crudo (un proceso
-   `ffmpeg -re` por pista, a ritmo real) y lo escribe al stdin de un
+   `ffmpeg -re` por pista, a ritmo real). La voz del locutor suena sobre
+   el arranque del tema entrante como colchón atenuado (**ducking**, con
+   rampas suaves), y la cola de un tema se funde con el arranque del
+   siguiente cuando no hay locutor de por medio (**crossfade**) — ambos
+   con `numpy` sobre el PCM crudo. Todo se escribe al stdin de un
    `ffmpeg` **persistente** que re-codifica a mp3 128k contra Icecast. Ese
    proceso vive toda la sesión: la conexión no se corta entre temas.
 
