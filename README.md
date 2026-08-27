@@ -17,7 +17,8 @@ de decisiones en [docs/](docs/).
 - ✅ Fase 3 — Programación (rotación, no-repetición, "sonando ahora")
 - ✅ Fase 4 — El locutor (Piper TTS + guiones LLM con fallback)
 - ✅ Fase 5 — Mezcla de verdad (crossfade, ducking, pre-generación del guion)
-- ⏳ Fase 6 — Publicidades falsas — próxima
+- ✅ Fase 6 — Publicidades falsas (guiones curados + jingle + SFX, rotación)
+- ⏳ Fase 7 — Web — próxima
 
 ## Cómo funciona
 
@@ -122,7 +123,8 @@ Si cambiás `.env`, correr de nuevo `./scripts/render-icecast-config.sh` y
 |---------|----------|
 | `skywave scan <carpeta>` | Escanea recursivamente (mp3/flac/ogg/m4a/wav), lee tags con mutagen y guarda en SQLite. Re-escanear actualiza, no duplica. |
 | `skywave list` | Lista la biblioteca en una tabla (artista, título, año, álbum) |
-| `skywave play` | Radio continua: rotación, locutor entre temas, hasta Ctrl+C |
+| `skywave play` | Radio continua: rotación, locutor entre temas, publicidades, hasta Ctrl+C |
+| `skywave render-ads` | Sintetiza a WAV las publicidades curadas a mano en `assets/ads/scripts/*.txt` (voz + colchón + stinger), a `assets/ads/*.wav` |
 
 | Opción | Comandos | Qué hace |
 |--------|----------|----------|
@@ -130,6 +132,10 @@ Si cambiás `.env`, correr de nuevo `./scripts/render-icecast-config.sh` y
 | `--mount <nombre>` | `play` | Punto de montaje en Icecast (default `sky.mp3`) |
 | `--no-repeat-artist <N>` | `play` | Ventana de temas sin repetir artista (default 3) |
 | `--sin-locutor` | `play` | Solo música, sin presentaciones |
+| `--sin-publicidades` | `play` | Sin publicidades intercaladas |
+| `--ads-every <N>` | `play` | Cada cuántos temas suena una publicidad (default 8) |
+| `--scripts-dir <carpeta>` | `render-ads` | Carpeta con los guiones `.txt` curados (default `assets/ads/scripts`) |
+| `--out-dir <carpeta>` | `render-ads` | Carpeta donde se escriben los WAV (default `assets/ads`) |
 
 Si un track no tiene tags (pasa con los `.wav`), el título y el artista se
 deducen de la carpeta (`Artista - Álbum/NN - Título.wav`).
@@ -143,8 +149,9 @@ uv run ruff format .    # formato
 ```
 
 Estructura: `src/skywave/` con un subpaquete por componente — `library/`
-(scanner, tags, SQLite), `scheduler/` (qué suena), `host/` (el locutor),
-`mixer/` (audio a Icecast), `web/` (Fase 7, vacío aún).
+(scanner, tags, SQLite), `scheduler/` (qué suena, rotación de temas y
+publicidades), `host/` (el locutor), `mixer/` (audio a Icecast), `ads/`
+(curar y producir publicidades), `web/` (Fase 7, vacío aún).
 
 El estado del trabajo se trackea en los
 [issues y milestones](https://github.com/Skayear/SkyWave-FM/milestones) del

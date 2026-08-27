@@ -97,8 +97,10 @@ Trabajamos fase por fase. No adelantes fases sin que yo lo pida.
       audio básico, threading con resultados.* (Mecánica y pipeline
       probados a mano con Icecast+Ollama+Piper; falta la confirmación
       auditiva final de Pablo — ver docs/fase-5-mezcla-de-verdad.md.)
-- [ ] **Fase 6 — Publicidades falsas:** guiones curados + jingle + SFX,
-      insertadas en la rotación.
+- [x] **Fase 6 — Publicidades falsas:** guiones curados + jingle + SFX,
+      insertadas en la rotación. (Mecánica probada a mano al aire; falta la
+      confirmación auditiva final de Pablo del colchón/stinger — ver
+      docs/fase-6-publicidades-falsas.md.)
 - [ ] **Fase 7 — Web:** FastAPI, reproductor, text box de saludos, moderación
       básica + rate limit, WebSocket. *Aprendo: async, pydantic, FastAPI.*
 - [ ] **Fase 8 — Producción:** Dockerizar, desplegar en el homelab k3s,
