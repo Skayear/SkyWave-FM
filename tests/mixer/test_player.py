@@ -1,7 +1,9 @@
+import numpy as np
+
 from skywave.mixer.player import (
     _crossfade,
+    _duck_chunks,
     _duck_envelope,
-    _duck_mix,
     _take,
     crossfade_window_bytes,
 )
@@ -56,42 +58,85 @@ def test_crossfade_usa_el_largo_menor_cuando_difieren() -> None:
     assert len(result) == len(head)
 
 
-def test_duck_envelope_baja_sostiene_y_sube() -> None:
-    envelope = _duck_envelope(10, duck_gain=0.25, ramp_frames=2)
+def test_duck_envelope_silencio_fade_in_sostenido_y_release() -> None:
+    # 10 frames de habla: 30% de silencio total (el locutor arranca hablando
+    # solo), sube como colchón, sostiene, y el release ocurre en un tramo
+    # aparte, recién después de que el habla terminó.
+    envelope = _duck_envelope(10, duck_gain=0.4, solo_ratio=0.3, fade_in_frames=4, release_frames=2)
 
-    assert len(envelope) == 10
-    assert envelope[0] == 1.0  # arranca a volumen pleno
-    assert list(envelope[2:8]) == [0.25] * 6  # sostiene atenuado en el medio
+    assert len(envelope) == 12
+    assert list(envelope[:3]) == [0.0, 0.0, 0.0]  # arranca en silencio total, sin música
+    assert envelope[3] == 0.0  # el colchón empieza a subir desde cero
+    assert list(envelope[7:10]) == [0.4, 0.4, 0.4]  # sostiene atenuado el resto del habla
+    assert envelope[10] == 0.4  # el release recién arranca cuando el habla ya terminó
     assert envelope[-1] == 1.0  # termina a volumen pleno
 
 
-def test_duck_envelope_recorta_las_rampas_si_el_segmento_es_corto() -> None:
-    # Con ramp_frames=100 pero solo 4 frames, no puede haber "sostenido":
-    # la mitad baja, la mitad sube, sin que se pisen.
-    envelope = _duck_envelope(4, duck_gain=0.25, ramp_frames=100)
+def test_duck_envelope_recorta_el_fade_in_si_el_habla_es_corta() -> None:
+    # Con fade_in_frames=100 pero solo 3 frames de habla (sin silencio),
+    # no puede haber "sostenido": el fade-in se recorta a la duración del
+    # habla.
+    envelope = _duck_envelope(
+        3, duck_gain=0.25, solo_ratio=0.0, fade_in_frames=100, release_frames=3
+    )
 
-    assert len(envelope) == 4
+    assert len(envelope) == 6
 
 
-def test_duck_mix_atenua_la_musica_bajo_la_voz() -> None:
+def test_duck_chunks_mezcla_con_la_envolvente_dada() -> None:
     frame = (1000).to_bytes(2, "little", signed=True) * 2  # 1 frame estéreo
-    speech = frame * 4
-    music = frame * 4
+    padded_speech = frame * 4
+    envelope = np.array([0.0, 0.0, 0.25, 0.25])
+    music_chunks = iter([frame * 4])  # un solo chunk con toda la música
 
-    result = _duck_mix(speech, music, duck_gain=0.25, ramp_seconds=0.0)
+    result = b"".join(_duck_chunks(music_chunks, padded_speech, envelope))
 
-    assert len(result) == len(speech)
-    # Sin rampa (ramp_seconds=0), el colchón entero está atenuado a 0.25:
-    # voz (1000) + música*0.25 (250) = 1250 en cada muestra.
+    assert len(result) == len(padded_speech)
     first_sample = int.from_bytes(result[0:2], "little", signed=True)
-    assert first_sample == 1250
+    assert first_sample == 1000  # envolvente en 0.0: solo voz, nada de música
+    last_sample = int.from_bytes(result[-4:-2], "little", signed=True)
+    assert last_sample == 1250  # voz (1000) + música*0.25 (250)
 
 
-def test_duck_mix_usa_el_largo_menor_cuando_difieren() -> None:
+def test_duck_chunks_mezcla_a_traves_de_varios_chunks() -> None:
+    # ffmpeg entrega la música en chunks de tamaño fijo que no
+    # necesariamente coinciden con los tramos de la envolvente -- tiene
+    # que funcionar igual mezclando parcialmente adentro de un chunk.
     frame = (1000).to_bytes(2, "little", signed=True) * 2
-    speech = frame * 5
-    music = frame * 2
+    padded_speech = frame * 4
+    envelope = np.array([0.0, 0.0, 0.25, 0.25])
+    music_chunks = iter([frame * 2, frame * 2])  # el corte cae justo a la mitad
 
-    result = _duck_mix(speech, music, duck_gain=0.25, ramp_seconds=0.0)
+    result = b"".join(_duck_chunks(music_chunks, padded_speech, envelope))
 
-    assert len(result) == len(music)
+    assert len(result) == len(padded_speech)
+    first_sample = int.from_bytes(result[0:2], "little", signed=True)
+    assert first_sample == 1000
+    last_sample = int.from_bytes(result[-4:-2], "little", signed=True)
+    assert last_sample == 1250
+
+
+def test_duck_chunks_deja_pasar_sin_mezclar_lo_que_sobra_de_la_envolvente() -> None:
+    # Un chunk que cruza el final de la envolvente: la parte de adentro se
+    # mezcla, la de afuera pasa intacta (la pista sola, sin voz de fondo).
+    frame = (1000).to_bytes(2, "little", signed=True) * 2
+    padded_speech = frame * 2
+    envelope = np.array([0.0, 0.25])
+    music_chunks = iter([frame * 4])  # 4 frames, la envolvente solo cubre 2
+
+    result = b"".join(_duck_chunks(music_chunks, padded_speech, envelope))
+
+    assert len(result) == len(frame) * 4
+    third_sample = int.from_bytes(result[2 * 4 : 2 * 4 + 2], "little", signed=True)
+    assert third_sample == 1000  # ya pasó la envolvente: música sola, sin mezclar
+
+
+def test_duck_chunks_deja_pasar_chunks_enteros_una_vez_cubierta_la_envolvente() -> None:
+    frame = (1000).to_bytes(2, "little", signed=True) * 2
+    padded_speech = frame * 2
+    envelope = np.array([0.0, 0.25])
+    music_chunks = iter([frame * 2, frame * 3])  # el segundo chunk entero ya es "resto"
+
+    result = b"".join(_duck_chunks(music_chunks, padded_speech, envelope))
+
+    assert len(result) == len(frame) * 5

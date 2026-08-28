@@ -50,9 +50,9 @@ con voz es ducking (#23), no esto.
 ### 3. Ducking: la música de colchón bajo la voz (issue [#23](https://github.com/Skayear/SkyWave-FM/issues/23))
 
 `play_ducked()`: mezcla el guion del locutor (a volumen pleno) con el
-arranque del *próximo* tema — no la cola del que termina — atenuado a 0.25
-por default con rampas de bajada y subida de 0.5s, y sigue con el resto de
-la pista a volumen normal. Reemplaza la voz en seco de Fase 4.
+arranque del *próximo* tema — no la cola del que termina — atenuado por
+default, y sigue con el resto de la pista a volumen normal. Reemplaza la
+voz en seco de Fase 4.
 
 La decisión de qué usar como colchón (arranque del entrante vs. cola del
 saliente) la dejaba abierta el issue; se fue por el arranque del entrante
@@ -83,16 +83,72 @@ igual como red de seguridad.
 
 ## Ajustes no anticipados
 
-Ninguno grande — la fase se apoyó en el diseño de Fase 2 (Decoder/Encoder
-por PCM crudo) más de lo esperado: ni crossfade ni ducking necesitaron
-tocar `Decoder`/`Encoder`, todo se resolvió componiendo `audio.py` con
-`_take()`/`_stream_with_held_tail()` en `player.py`.
+- Al principio, ninguno grande — la fase se apoyó en el diseño de Fase 2
+  (Decoder/Encoder por PCM crudo) más de lo esperado: ni crossfade ni
+  ducking necesitaron tocar `Decoder`/`Encoder`, todo se resolvió
+  componiendo `audio.py` con `_take()`/`_stream_with_held_tail()` en
+  `player.py`.
+- **El ducking original se solapaba con el final de la frase, encontrado
+  por Pablo al aire (2026-08-28).** El colchón de música duraba
+  *exactamente* lo mismo que el audio del locutor, y la rampa de subida
+  de vuelta a volumen pleno (0.5s) vivía adentro de esa misma ventana —
+  los últimos instantes de esa rampa se solapaban con el final del habla,
+  así que la música ya sonaba fuerte otra vez mientras el locutor todavía
+  estaba terminando de hablar. Encima `duck_gain=0.25` dejaba la música
+  bastante presente incluso en el tramo sostenido, tapando parte de la
+  voz. Se corrigió con ataque rápido / release lento (la práctica habitual
+  de ducking en audio): `_duck_envelope()` y `_duck_mix()` ahora separan
+  `attack_frames` (bajada, dentro del habla) de `release_frames` (subida,
+  en un tramo aparte *después* de que el habla ya terminó, sobre música
+  sin voz encima). `play_ducked()` pide de más a `music_path` (el habla
+  más `release_seconds` extra) para tener ese margen. Defaults nuevos:
+  `duck_gain=0.15` (antes 0.25, música más abajo para que la voz se
+  entienda mejor), `attack_seconds=0.2` (antes 0.5, cae rápido apenas
+  arranca la voz) y `release_seconds=1.0` (nuevo, la música tarda un
+  segundo en volver a subir, ya en silencio de por medio).
+- **Ni siquiera con eso alcanzaba: Pablo pidió, al aire de nuevo
+  (2026-08-28), que el locutor arranque hablando un tramo *totalmente*
+  solo, sin nada de música todavía — no solo atenuada, en silencio — con
+  una proporción concreta: 75% del habla sin música, 25% con colchón.
+  `_duck_envelope()` pasó de tres a cuatro tramos: silencio total
+  (`solo_ratio` del habla), sube como colchón (`fade_in_frames`,
+  reemplaza al viejo `attack_frames` — ahora es una subida desde 0 en vez
+  de una bajada desde 1.0, porque ya no hay "música a full" al arrancar
+  el habla), sostiene, y el release sigue igual que antes (aparte,
+  después del habla). `duck_gain` bajó de nuevo, 0.15→0.10, porque seguía
+  tapando la voz incluso en el tramo sostenido. Constantes nuevas:
+  `DEFAULT_DUCK_SOLO_RATIO=0.75`, `DEFAULT_DUCK_FADE_IN_SECONDS=0.2`
+  (renombrado de `DEFAULT_DUCK_ATTACK_SECONDS`, mismo valor).
+- **Aire muerto real de varios segundos entre que termina un tema y
+  arranca el locutor, encontrado por Pablo al aire (2026-08-28, mismo
+  día).** No era un problema de mezcla sino de pacing: `Decoder` siempre
+  usa `ffmpeg -re` para leer a ritmo real (issue #8), pero `play_ducked`
+  lo usaba también para decodificar el WAV de la voz — que se junta
+  entero en memoria antes de mezclarlo (`b"".join(...)`), así que pacear
+  esa lectura no servía para nada más que bloquear: el `encoder` no
+  recibía ni un byte durante toda la duración real del guion (varios
+  segundos) antes del primer `write()`. Encima, `play_ducked` armaba el
+  colchón entero (voz + música + release) en memoria y recién ahí lo
+  escribía de una — el mismo problema, aplicado también a la ventana de
+  música que tenía que llegar a ritmo real antes de poder mezclarla.
+  Arreglado en dos partes: `Decoder` ganó un flag `realtime: bool = True`
+  (`False` desactiva el `-re`) usado tanto acá como en
+  `ads/jingle.py::produce_ad()` (mismo patrón: decodifica la voz entera
+  para mezclarla, ahí también sobraba el pacing, aunque ese caso no genera
+  aire muerto por ser offline). Y `_duck_mix()` (que juntaba todo antes de
+  devolver un solo bloque) se reemplazó por `_duck_chunks()`: mezcla la
+  música con la voz *a medida que ffmpeg entrega cada chunk*, ya a ritmo
+  real, en vez de esperar a juntar el colchón entero — así el primer byte
+  sale al aire casi al instante en vez de después de un bloqueo de varios
+  segundos. `play_ducked()` quedó más simple además: ya no necesita
+  `_take()` para recortar el colchón de antemano.
 
 ## Probado a mano
 
-Con Icecast + Ollama + Piper corriendo de verdad: sesiones de `skywave
+Con Icecast + Ollama + Kokoro corriendo de verdad: sesiones de `skywave
 play` de hasta 150s que atravesaron transiciones completas entre temas
 (incluida la más corta de la biblioteca, "Dear Friends" de Queen, ~69s),
-sin tracebacks ni procesos `ffmpeg` huérfanos al cortar. Falta la
-confirmación auditiva final de Pablo escuchando el fundido y el colchón al
-aire — la mecánica y el pipeline están verificados, el oído todavía no.
+sin tracebacks ni procesos `ffmpeg` huérfanos al cortar. La confirmación
+auditiva de Pablo escuchando el fundido y el colchón al aire (2026-08-28)
+fue lo que encontró el bug de solapamiento de arriba — corregido y
+pendiente de una segunda pasada de oído.
