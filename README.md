@@ -18,7 +18,7 @@ de decisiones en [docs/](docs/).
 - ✅ Fase 4 — El locutor (Kokoro TTS + guiones LLM con fallback)
 - ✅ Fase 5 — Mezcla de verdad (crossfade, ducking, pre-generación del guion)
 - ✅ Fase 6 — Publicidades falsas (guiones curados + jingle + SFX, rotación)
-- ⏳ Fase 7 — Web — próxima
+- ⏳ Fase 7 — Web (en progreso: `GET /now-playing`)
 
 ## Cómo funciona
 
@@ -144,6 +144,19 @@ Si cambiás `.env`, correr de nuevo `./scripts/render-icecast-config.sh` y
 Si un track no tiene tags (pasa con los `.wav`), el título y el artista se
 deducen de la carpeta (`Artista - Álbum/NN - Título.wav`).
 
+### Web (Fase 7, en progreso)
+
+Todavía no tiene su propio subcomando `skywave`, se levanta directo con
+uvicorn (necesita `skywave play` corriendo aparte para que `now_playing`
+tenga algo que mostrar):
+
+```bash
+uv run uvicorn skywave.web.app:app --reload
+```
+
+`GET /now-playing` devuelve el tema sonando (o `null` si la radio está
+apagada).
+
 ## Desarrollo
 
 ```bash
@@ -155,7 +168,8 @@ uv run ruff format .    # formato
 Estructura: `src/skywave/` con un subpaquete por componente — `library/`
 (scanner, tags, SQLite), `scheduler/` (qué suena, rotación de temas y
 publicidades), `host/` (el locutor), `mixer/` (audio a Icecast), `ads/`
-(curar y producir publicidades), `web/` (Fase 7, vacío aún).
+(curar y producir publicidades), `web/` (Fase 7, FastAPI: `GET
+/now-playing` por ahora).
 
 El estado del trabajo se trackea en los
 [issues y milestones](https://github.com/Skayear/SkyWave-FM/milestones) del

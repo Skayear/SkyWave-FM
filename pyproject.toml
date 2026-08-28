@@ -7,6 +7,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.141.1",
     "kokoro>=0.9.4",
     "mutagen>=1.48.1",
     "python-dotenv>=1.2.3",
@@ -14,6 +15,7 @@ dependencies = [
     "soundfile>=0.14.0",
     "torch>=2.13.0",
     "typer>=0.27.1",
+    "uvicorn[standard]>=0.52.4",
 ]
 
 [project.scripts]
@@ -25,6 +27,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pytest>=9.1.1",
     "ruff>=0.16.0",
 ]
@@ -38,6 +41,12 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# Depends(...) como valor default es el idiom de FastAPI para inyección
+# de dependencias -- no el error de "llamada mutable en el default" que
+# B008 busca detectar en general.
+"src/skywave/web/*.py" = ["B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
