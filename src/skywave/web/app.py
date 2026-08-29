@@ -1,7 +1,10 @@
+import os
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from skywave.library import db
@@ -11,6 +14,7 @@ from skywave.library import db
 DEFAULT_DB_PATH = Path("skywave.db")
 
 app = FastAPI(title="SkyWave FM")
+templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 
 class TrackOut(BaseModel):
@@ -25,6 +29,16 @@ class NowPlayingOut(BaseModel):
     started_at: datetime
 
 
+def get_stream_url() -> str:
+    """URL pública del mount de Icecast, con los mismos defaults que
+    `cli._icecast_url` (host/puerto por variables de entorno) -- pero acá
+    sin password: es la URL que escucha un navegador, no la del source
+    que empuja el mixer."""
+    host = os.environ.get("ICECAST_SERVER_HOST", "localhost")
+    port = os.environ.get("ICECAST_SOURCE_PORT", "8010")
+    return f"http://{host}:{port}/sky.mp3"
+
+
 def get_db_path() -> Path:
     """Dependencia inyectable (no una constante importada a mano): los
     tests la overridean con `app.dependency_overrides` para apuntar a una
@@ -32,6 +46,15 @@ def get_db_path() -> Path:
     que el `Callable` inyectado de `VoiceCache`, aplicado a la manera de
     FastAPI."""
     return DEFAULT_DB_PATH
+
+
+@app.get("/", response_class=HTMLResponse)
+def index(request: Request, stream_url: str = Depends(get_stream_url)) -> HTMLResponse:
+    """Página con el reproductor. El "sonando ahora" no se rellena acá
+    server-side -- se pide async a `/now-playing` desde JS (ver
+    templates/index.html) para poder refrescarlo sin recargar la
+    página."""
+    return templates.TemplateResponse(request, "index.html", {"stream_url": stream_url})
 
 
 @app.get("/now-playing")

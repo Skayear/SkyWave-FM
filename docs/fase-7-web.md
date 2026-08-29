@@ -39,7 +39,43 @@ Probado con `TestClient` (biblioteca vacía, tema sonando, biblioteca con
 temas pero radio apagada) y a mano contra el `skywave.db` real con
 `skywave play` corriendo al mismo tiempo.
 
+### 2. Página con reproductor (issue [#30](https://github.com/Skayear/SkyWave-FM/issues/30))
+
+`GET /` sirve `templates/index.html` (Jinja2, vía `Jinja2Templates` de
+FastAPI) con un `<audio>` apuntando al mount de Icecast. La URL del
+stream se arma con las mismas variables de entorno que ya usa
+`cli._icecast_url` (`ICECAST_SERVER_HOST`, `ICECAST_SOURCE_PORT`), pero
+sin password: es la URL que escucha un navegador, no la del source que
+empuja el mixer. Se expone como una dependencia (`get_stream_url`),
+mismo patrón que `get_db_path`.
+
+El "sonando ahora" **no** se rellena server-side al armar la página —
+la propia página pide `/now-playing` por JS al cargar y cada 10s
+después, reusando el endpoint del issue anterior en vez de duplicar la
+lógica de lectura de `now_playing`. Sin frameworks de frontend: un
+`fetch` + `textContent` alcanza.
+
+Decisión chica: el JS usa `textContent`, no `innerHTML`, para pintar
+título/artista. Vienen de tags de audio (mutagen) — no son HTML de
+confianza, y `innerHTML` con datos externos es el patrón clásico de XSS.
+Barato de hacer bien desde el arranque.
+
+Probado con `TestClient` (que la página devuelva HTML con el `<audio>`
+y una referencia a `/now-playing`) y a mano en el navegador con
+`skywave play` corriendo: se escucha el stream y el tema actual se ve y
+se actualiza.
+
 ## Ajustes no anticipados
+
+- Los issues #30, #31 y #32 aparecieron cerrados en GitHub el
+  2026-08-28 con comentarios que describían el trabajo como terminado
+  y citaban commits (`34b46d8`, `317b938`, `9390fb5`) que **no existen**
+  en ningún lado del repo (ni local, ni `origin`, ni ramas, ni objetos
+  sueltos) — tampoco había código correspondiente (`templates/`,
+  `greetings.py`, ruta `/ws` no existían). Todo indica que una sesión
+  de IA anterior alucinó haber completado la fase y cerró los issues
+  sin commitear nada. Se reabrieron los tres el 2026-08-28 antes de
+  retomar #30 de verdad.
 
 - `ruff`'s `B008` marca `Depends(...)` como default de argumento como
   sospechoso (en general, una llamada mutable en un default es un bug) —

@@ -25,6 +25,15 @@ def _client(db_path: Path) -> TestClient:
     return TestClient(app)
 
 
+def test_index_sirve_html_con_el_reproductor(tmp_path: Path) -> None:
+    response = _client(tmp_path / "library.db").get("/")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "<audio" in response.text
+    assert "/now-playing" in response.text  # el JS consulta este endpoint
+
+
 def test_now_playing_con_biblioteca_vacia_devuelve_null(tmp_path: Path) -> None:
     client = _client(tmp_path / "library.db")
 

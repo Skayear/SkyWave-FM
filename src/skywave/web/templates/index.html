@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>SkyWave FM</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #111;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+      padding: 3rem 1rem;
+    }
+    h1 { margin: 0; letter-spacing: 0.05em; }
+    audio { width: 100%; max-width: 420px; }
+    #now-playing {
+      text-align: center;
+      min-height: 3rem;
+    }
+    #now-playing .titulo { font-size: 1.1rem; }
+    #now-playing .artista { color: #999; }
+  </style>
+</head>
+<body>
+  <h1>📻 SkyWave FM</h1>
+  <audio controls src="{{ stream_url }}"></audio>
+  <div id="now-playing">
+    <div class="titulo" id="np-titulo">Sintonizando...</div>
+    <div class="artista" id="np-artista"></div>
+  </div>
+
+  <script>
+    // textContent, no innerHTML: título/artista vienen de tags de audio
+    // (mutagen), no son HTML de confianza.
+    async function actualizarSonandoAhora() {
+      const titulo = document.getElementById("np-titulo");
+      const artista = document.getElementById("np-artista");
+      try {
+        const resp = await fetch("/now-playing");
+        const data = await resp.json();
+        if (data === null) {
+          titulo.textContent = "La radio está apagada.";
+          artista.textContent = "";
+          return;
+        }
+        titulo.textContent = data.track.title;
+        artista.textContent = data.track.artist;
+      } catch {
+        titulo.textContent = "No se pudo consultar qué está sonando.";
+        artista.textContent = "";
+      }
+    }
+
+    actualizarSonandoAhora();
+    setInterval(actualizarSonandoAhora, 10000);
+  </script>
+</body>
+</html>

@@ -18,7 +18,7 @@ de decisiones en [docs/](docs/).
 - ✅ Fase 4 — El locutor (Kokoro TTS + guiones LLM con fallback)
 - ✅ Fase 5 — Mezcla de verdad (crossfade, ducking, pre-generación del guion)
 - ✅ Fase 6 — Publicidades falsas (guiones curados + jingle + SFX, rotación)
-- ⏳ Fase 7 — Web (en progreso: `GET /now-playing`)
+- ⏳ Fase 7 — Web (en progreso: `GET /now-playing` y página con reproductor)
 
 ## Cómo funciona
 
@@ -154,7 +154,9 @@ tenga algo que mostrar):
 uv run uvicorn skywave.web.app:app --reload
 ```
 
-`GET /now-playing` devuelve el tema sonando (o `null` si la radio está
+`GET /` sirve una página con el reproductor (`<audio>` apuntando al
+mount de Icecast) y el tema sonando, que se actualiza solo cada 10s
+consultando `GET /now-playing` (devuelve `null` si la radio está
 apagada).
 
 ## Desarrollo
