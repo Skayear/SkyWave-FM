@@ -1,13 +1,14 @@
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from skywave.library import db
+from skywave.web import greetings
 
 #: Mismo default que la CLI (`skywave scan`/`skywave play`): el SQLite de
 #: la biblioteca en el cwd -- no hay config.toml todavía.
@@ -27,6 +28,20 @@ class TrackOut(BaseModel):
 class NowPlayingOut(BaseModel):
     track: TrackOut
     started_at: datetime
+
+
+class GreetingIn(BaseModel):
+    message: str = Field(min_length=1, max_length=200)
+
+    @field_validator("message")
+    @classmethod
+    def _no_solo_espacios(cls, value: str) -> str:
+        # Field(min_length=1) ya rechaza "" pero no " " -- el validator
+        # limpia los espacios antes de decidir si está vacío de verdad.
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("el mensaje no puede estar vacío")
+        return stripped
 
 
 def get_stream_url() -> str:
@@ -55,6 +70,31 @@ def index(request: Request, stream_url: str = Depends(get_stream_url)) -> HTMLRe
     templates/index.html) para poder refrescarlo sin recargar la
     página."""
     return templates.TemplateResponse(request, "index.html", {"stream_url": stream_url})
+
+
+@app.post("/greetings", status_code=201)
+def post_greeting(
+    greeting: GreetingIn, request: Request, db_path: Path = Depends(get_db_path)
+) -> dict[str, str]:
+    """Guarda un saludo si pasa moderación y rate limit. 422 si tiene
+    una palabra prohibida, 429 si el identificador (la IP -- no hay
+    login, es lo único que tenemos) mandó demasiados saludos seguidos.
+    Rechazar temprano en vez de guardar basura, mismo criterio que
+    `_mentions_track` en el locutor."""
+    if not greetings.is_appropriate(greeting.message):
+        raise HTTPException(status_code=422, detail="mensaje no permitido")
+
+    identifier = request.client.host if request.client else "desconocido"
+    conn = db.connect(db_path)
+    greetings.ensure_schema(conn)
+    # insert_greeting guarda en UTC-aware, hay que comparar en el mismo huso
+    now = datetime.now(UTC)
+    if not greetings.is_within_rate_limit(greetings.recent_sends(conn, identifier), now=now):
+        raise HTTPException(status_code=429, detail="demasiados saludos, esperá un poco")
+
+    with conn:
+        greetings.insert_greeting(conn, greeting.message, identifier, created_at=now)
+    return {"status": "ok"}
 
 
 @app.get("/now-playing")

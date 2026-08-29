@@ -65,6 +65,44 @@ y una referencia a `/now-playing`) y a mano en el navegador con
 `skywave play` corriendo: se escucha el stream y el tema actual se ve y
 se actualiza.
 
+### 3. Saludos: moderación y rate limit (issue [#31](https://github.com/Skayear/SkyWave-FM/issues/31))
+
+Nuevo módulo `web/greetings.py`, separado a propósito de
+`library/db.py`: un saludo es contenido generado por un oyente de la
+web, no un dato de la biblioteca musical, aunque hoy los dos esquemas
+vivan en el mismo archivo SQLite.
+
+Dos funciones puras primero, con tests antes de tocar SQLite o
+FastAPI:
+
+- `is_appropriate(texto)` — filtro de palabras prohibidas por palabra
+  completa (no substring, así "pelotudo" no marca "pelotudos"),
+  case-insensitive. Lista chica a propósito, ampliable después.
+- `is_within_rate_limit(envios_previos, now=..., max_messages=3,
+  window=5min)` — mismo patrón de reloj inyectable que `pick_next`, no
+  sabe de IPs, solo cuenta timestamps dentro de la ventana.
+
+Recién con esas dos probadas se sumó la persistencia (`ensure_schema`,
+`insert_greeting`, `recent_sends`) y `POST /greetings` en `app.py`:
+valida con Pydantic (1-200 caracteres, un `field_validator` rechaza
+mensajes de solo espacios que `min_length` no detecta), aplica
+moderación (422) y rate limit por IP (429), guarda si pasa todo.
+
+Bug real encontrado al conectar las piezas: `insert_greeting` guarda
+`datetime.now(UTC)` (aware) pero `is_within_rate_limit` comparaba por
+default contra `datetime.now()` (naive) → `TypeError` al comparar.
+Se arregló pasando `now=datetime.now(UTC)` explícito desde el endpoint,
+mismo valor que se usa para guardar.
+
+El textbox (`<textarea>` + botón) se agregó a `templates/index.html`
+en un paso aparte, con `fetch` a `POST /greetings` y mensajes de error
+distintos para 422/429.
+
+Probado con tests puros (moderación, rate limit, persistencia),
+`TestClient` sobre el endpoint (saludo válido, vacío, palabra
+prohibida, rate limit disparado con 4 pedidos seguidos) y a mano en el
+navegador con `skywave play` corriendo.
+
 ## Ajustes no anticipados
 
 - Los issues #30, #31 y #32 aparecieron cerrados en GitHub el
@@ -90,7 +128,6 @@ se actualiza.
   Hub sin autenticar en Fase 4): no rompe nada, y perseguir un paquete
   que no existe públicamente sería prematuro.
 
-## Para estudiar antes de seguir con #30
+## Para estudiar antes de seguir con #32
 
-Servir HTML/templates con Jinja2 desde FastAPI, y la diferencia entre
-devolver JSON (esto) y servir una página completa.
+WebSockets con FastAPI y manejo de conexiones concurrentes en async.

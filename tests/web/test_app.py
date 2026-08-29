@@ -32,6 +32,7 @@ def test_index_sirve_html_con_el_reproductor(tmp_path: Path) -> None:
     assert response.headers["content-type"].startswith("text/html")
     assert "<audio" in response.text
     assert "/now-playing" in response.text  # el JS consulta este endpoint
+    assert "saludo-form" in response.text  # el textbox de saludos (#31)
 
 
 def test_now_playing_con_biblioteca_vacia_devuelve_null(tmp_path: Path) -> None:
@@ -74,3 +75,35 @@ def test_now_playing_sin_nada_sonando_devuelve_null(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert response.json() is None
+
+
+def test_post_greeting_lo_guarda(tmp_path: Path) -> None:
+    response = _client(tmp_path / "library.db").post(
+        "/greetings", json={"message": "Hola desde Rosario!"}
+    )
+
+    assert response.status_code == 201
+
+
+def test_post_greeting_vacio_es_422(tmp_path: Path) -> None:
+    response = _client(tmp_path / "library.db").post("/greetings", json={"message": "   "})
+
+    assert response.status_code == 422
+
+
+def test_post_greeting_con_palabra_prohibida_es_422(tmp_path: Path) -> None:
+    response = _client(tmp_path / "library.db").post(
+        "/greetings", json={"message": "sos un boludo"}
+    )
+
+    assert response.status_code == 422
+
+
+def test_post_greeting_respeta_el_rate_limit(tmp_path: Path) -> None:
+    client = _client(tmp_path / "library.db")
+    for _ in range(3):
+        assert client.post("/greetings", json={"message": "hola!"}).status_code == 201
+
+    response = client.post("/greetings", json={"message": "hola de nuevo!"})
+
+    assert response.status_code == 429
