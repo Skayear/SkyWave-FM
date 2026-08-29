@@ -2,7 +2,7 @@
 
 Objetivo de la fase: una web mínima para escuchar la radio desde el
 navegador sin tocar la URL de Icecast a mano, ver qué está sonando en
-vivo, y dejar un saludo. **En progreso** — milestone [Fase 7 —
+vivo, y dejar un saludo. **Completa** — milestone [Fase 7 —
 Web](https://github.com/Skayear/SkyWave-FM/milestone/8), 4 issues
 (#29-#32).
 
@@ -53,7 +53,8 @@ El "sonando ahora" **no** se rellena server-side al armar la página —
 la propia página pide `/now-playing` por JS al cargar y cada 10s
 después, reusando el endpoint del issue anterior en vez de duplicar la
 lógica de lectura de `now_playing`. Sin frameworks de frontend: un
-`fetch` + `textContent` alcanza.
+`fetch` + `textContent` alcanza. (Este polling por HTTP se reemplazó
+por un WebSocket en el #32 — ver más abajo.)
 
 Decisión chica: el JS usa `textContent`, no `innerHTML`, para pintar
 título/artista. Vienen de tags de audio (mutagen) — no son HTML de
@@ -103,6 +104,33 @@ Probado con tests puros (moderación, rate limit, persistencia),
 prohibida, rate limit disparado con 4 pedidos seguidos) y a mano en el
 navegador con `skywave play` corriendo.
 
+### 4. WebSocket para actualizar en vivo (issue [#32](https://github.com/Skayear/SkyWave-FM/issues/32))
+
+`GET /ws` reemplaza el polling HTTP de `/now-playing` cada 10s que
+tenía la página desde el #30. SQLite no tiene pub/sub nativo, así que
+el propio endpoint hace el polling: un loop `while True` que revisa
+`now_playing` cada `poll_interval` (default 2s, inyectable como
+dependencia -- mismo patrón que `get_db_path` -- para que los tests no
+esperen segundos reales) y solo manda un mensaje cuando el resultado
+cambió respecto al último enviado. Así un solo lugar lee la base por
+tick, en vez de una consulta HTTP por cada pestaña abierta.
+
+Se extrajo `_now_playing_payload(db_path)` como helper compartido
+entre `GET /now-playing` y `GET /ws`, para no mantener dos copias de
+la misma lógica de mapeo `db.NowPlaying` → `NowPlayingOut`.
+
+En el frontend, `index.html` abre un `WebSocket` a `/ws` en vez de
+hacer `fetch` periódico. Si la conexión se cae (proxy que corta
+conexiones ociosas, reinicio del server) se reconecta sola a los 3s --
+la página queda abierta horas escuchando la radio, así que no
+reconectar habría sido un bug real, no una posibilidad remota.
+
+Probado con `TestClient.websocket_connect` (primer mensaje `null` sin
+nada sonando, primer mensaje con el tema actual, mensaje nuevo al
+cambiar `now_playing` en la base) y a mano con dos pestañas del
+navegador abiertas contra `skywave play` corriendo: las dos se
+actualizan solas al cambiar de tema.
+
 ## Ajustes no anticipados
 
 - Los issues #30, #31 y #32 aparecieron cerrados en GitHub el
@@ -128,6 +156,10 @@ navegador con `skywave play` corriendo.
   Hub sin autenticar en Fase 4): no rompe nada, y perseguir un paquete
   que no existe públicamente sería prematuro.
 
-## Para estudiar antes de seguir con #32
+## Fase 7 completa
 
-WebSockets con FastAPI y manejo de conexiones concurrentes en async.
+Con #32 cerrado, los 4 issues del milestone están resueltos: la web
+sirve el reproductor, el "sonando ahora" en vivo por WebSocket, y el
+textbox de saludos con moderación y rate limit. Sigue faltando el
+subcomando `skywave serve` (por ahora se levanta con `uvicorn` a
+mano, ver README) y Fase 8 (producción: Docker, k3s, métricas).

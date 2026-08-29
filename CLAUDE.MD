@@ -104,8 +104,9 @@ Trabajamos fase por fase. No adelantes fases sin que yo lo pida.
       insertadas en la rotación. (Mecánica probada a mano al aire; falta la
       confirmación auditiva final de Pablo del colchón/stinger — ver
       docs/fase-6-publicidades-falsas.md.)
-- [ ] **Fase 7 — Web:** FastAPI, reproductor, text box de saludos, moderación
+- [x] **Fase 7 — Web:** FastAPI, reproductor, text box de saludos, moderación
       básica + rate limit, WebSocket. *Aprendo: async, pydantic, FastAPI.*
+      (Confirmado a mano en el navegador — ver docs/fase-7-web.md.)
 - [ ] **Fase 8 — Producción:** Dockerizar, desplegar en el homelab k3s,
       métricas Prometheus (oyentes, pistas/hora, latencia TTS, errores LLM),
       dashboard en Grafana. *Acá estoy en mi terreno.*

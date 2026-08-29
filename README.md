@@ -18,7 +18,7 @@ de decisiones en [docs/](docs/).
 - ✅ Fase 4 — El locutor (Kokoro TTS + guiones LLM con fallback)
 - ✅ Fase 5 — Mezcla de verdad (crossfade, ducking, pre-generación del guion)
 - ✅ Fase 6 — Publicidades falsas (guiones curados + jingle + SFX, rotación)
-- ⏳ Fase 7 — Web (en progreso: `GET /now-playing` y página con reproductor)
+- ✅ Fase 7 — Web (reproductor, "sonando ahora" en vivo por WebSocket, saludos)
 
 ## Cómo funciona
 
@@ -144,7 +144,7 @@ Si cambiás `.env`, correr de nuevo `./scripts/render-icecast-config.sh` y
 Si un track no tiene tags (pasa con los `.wav`), el título y el artista se
 deducen de la carpeta (`Artista - Álbum/NN - Título.wav`).
 
-### Web (Fase 7, en progreso)
+### Web (Fase 7)
 
 Todavía no tiene su propio subcomando `skywave`, se levanta directo con
 uvicorn (necesita `skywave play` corriendo aparte para que `now_playing`
@@ -155,9 +155,11 @@ uv run uvicorn skywave.web.app:app --reload
 ```
 
 `GET /` sirve una página con el reproductor (`<audio>` apuntando al
-mount de Icecast) y el tema sonando, que se actualiza solo cada 10s
-consultando `GET /now-playing` (devuelve `null` si la radio está
-apagada).
+mount de Icecast), el tema sonando en vivo por WebSocket (`GET /ws`,
+se reconecta solo si se corta), y un textbox para mandar un saludo
+(`POST /greetings`, con moderación de palabras prohibidas y rate limit
+por IP). `GET /now-playing` sigue disponible como endpoint JSON simple
+(devuelve `null` si la radio está apagada).
 
 ## Desarrollo
 

@@ -77,27 +77,32 @@
   <script>
     // textContent, no innerHTML: título/artista vienen de tags de audio
     // (mutagen), no son HTML de confianza.
-    async function actualizarSonandoAhora() {
-      const titulo = document.getElementById("np-titulo");
-      const artista = document.getElementById("np-artista");
-      try {
-        const resp = await fetch("/now-playing");
-        const data = await resp.json();
-        if (data === null) {
-          titulo.textContent = "La radio está apagada.";
-          artista.textContent = "";
-          return;
-        }
-        titulo.textContent = data.track.title;
-        artista.textContent = data.track.artist;
-      } catch {
-        titulo.textContent = "No se pudo consultar qué está sonando.";
-        artista.textContent = "";
+    const npTitulo = document.getElementById("np-titulo");
+    const npArtista = document.getElementById("np-artista");
+
+    function pintarSonandoAhora(data) {
+      if (data === null) {
+        npTitulo.textContent = "La radio está apagada.";
+        npArtista.textContent = "";
+        return;
       }
+      npTitulo.textContent = data.track.title;
+      npArtista.textContent = data.track.artist;
     }
 
-    actualizarSonandoAhora();
-    setInterval(actualizarSonandoAhora, 10000);
+    // GET /ws empuja el "sonando ahora" apenas cambia -- nada de
+    // polling HTTP desde acá. Si el socket se cae (proxy que corta
+    // conexiones ociosas, reinicio del server), se reconecta solo.
+    function conectarSonandoAhora() {
+      const protocolo = location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(`${protocolo}//${location.host}/ws`);
+
+      ws.onmessage = (event) => pintarSonandoAhora(JSON.parse(event.data));
+      ws.onerror = () => ws.close();
+      ws.onclose = () => setTimeout(conectarSonandoAhora, 3000);
+    }
+
+    conectarSonandoAhora();
 
     const saludoForm = document.getElementById("saludo-form");
     const saludoMensaje = document.getElementById("saludo-mensaje");

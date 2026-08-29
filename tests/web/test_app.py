@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from skywave.library import db
 from skywave.library.track import Track
-from skywave.web.app import app, get_db_path
+from skywave.web.app import app, get_db_path, get_poll_interval
 
 QUEEN = Track(
     path=Path("/music/Queen - Sheer Heart Attack/01 - Brighton Rock.flac"),
@@ -16,12 +16,22 @@ QUEEN = Track(
     duration_seconds=311.2,
 )
 
+BOWIE = Track(
+    path=Path("/music/Bowie - Hunky Dory/01 - Changes.flac"),
+    artist="David Bowie",
+    title="Changes",
+    album="Hunky Dory",
+    year=1971,
+    duration_seconds=222.0,
+)
 
-def _client(db_path: Path) -> TestClient:
-    """Cliente de pruebas con la dependencia de la base overrideada -- así
-    cada test apunta a su propio `tmp_path` en vez de tocar `skywave.db`
-    de verdad o pisarse entre tests."""
+
+def _client(db_path: Path, poll_interval: float = 0.05) -> TestClient:
+    """Cliente de pruebas con las dependencias overrideadas -- así cada
+    test apunta a su propio `tmp_path` en vez de tocar `skywave.db` de
+    verdad, y `/ws` no hace esperar segundos reales entre polls."""
     app.dependency_overrides[get_db_path] = lambda: db_path
+    app.dependency_overrides[get_poll_interval] = lambda: poll_interval
     return TestClient(app)
 
 
@@ -31,7 +41,7 @@ def test_index_sirve_html_con_el_reproductor(tmp_path: Path) -> None:
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     assert "<audio" in response.text
-    assert "/now-playing" in response.text  # el JS consulta este endpoint
+    assert "/ws" in response.text  # el JS se conecta acá para el "sonando ahora"
     assert "saludo-form" in response.text  # el textbox de saludos (#31)
 
 
@@ -107,3 +117,42 @@ def test_post_greeting_respeta_el_rate_limit(tmp_path: Path) -> None:
     response = client.post("/greetings", json={"message": "hola de nuevo!"})
 
     assert response.status_code == 429
+
+
+def test_ws_primer_mensaje_es_null_si_no_suena_nada(tmp_path: Path) -> None:
+    client = _client(tmp_path / "library.db")
+
+    with client.websocket_connect("/ws") as ws:
+        assert ws.receive_json() is None
+
+
+def test_ws_primer_mensaje_es_el_tema_sonando(tmp_path: Path) -> None:
+    db_path = tmp_path / "library.db"
+    conn = db.connect(db_path)
+    with conn:
+        db.upsert_track(conn, QUEEN)
+        db.set_now_playing(conn, QUEEN, started_at=datetime(2026, 8, 28, 15, 0, 0, tzinfo=UTC))
+
+    with _client(db_path).websocket_connect("/ws") as ws:
+        data = ws.receive_json()
+
+    assert data["track"]["title"] == "Brighton Rock"
+
+
+def test_ws_empuja_actualizacion_cuando_cambia_el_tema(tmp_path: Path) -> None:
+    db_path = tmp_path / "library.db"
+    conn = db.connect(db_path)
+    with conn:
+        db.upsert_track(conn, QUEEN)
+        db.upsert_track(conn, BOWIE)
+        db.set_now_playing(conn, QUEEN, started_at=datetime(2026, 8, 28, 15, 0, 0, tzinfo=UTC))
+
+    with _client(db_path).websocket_connect("/ws") as ws:
+        primero = ws.receive_json()
+        assert primero["track"]["title"] == "Brighton Rock"
+
+        with conn:
+            db.set_now_playing(conn, BOWIE, started_at=datetime(2026, 8, 28, 15, 3, 0, tzinfo=UTC))
+
+        segundo = ws.receive_json()
+        assert segundo["track"]["title"] == "Changes"

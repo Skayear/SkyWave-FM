@@ -1,8 +1,9 @@
+import asyncio
 import os
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator
@@ -63,6 +64,32 @@ def get_db_path() -> Path:
     return DEFAULT_DB_PATH
 
 
+def get_poll_interval() -> float:
+    """Cada cuántos segundos `/ws` revisa `now_playing` para decidir si
+    hay que empujar una actualización. Inyectable para que los tests no
+    tengan que esperar segundos reales -- mismo motivo que `get_db_path`."""
+    return 2.0
+
+
+def _now_playing_payload(db_path: Path) -> NowPlayingOut | None:
+    """Lectura compartida entre `GET /now-playing` y `GET /ws`: un solo
+    lugar que sabe mapear `db.NowPlaying` a la forma que sale por la
+    API, para no mantener dos copias de la misma lógica."""
+    conn = db.connect(db_path)
+    current = db.get_now_playing(conn)
+    if current is None:
+        return None
+    return NowPlayingOut(
+        track=TrackOut(
+            artist=current.track.artist,
+            title=current.track.title,
+            album=current.track.album,
+            year=current.track.year,
+        ),
+        started_at=current.started_at,
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, stream_url: str = Depends(get_stream_url)) -> HTMLResponse:
     """Página con el reproductor. El "sonando ahora" no se rellena acá
@@ -102,16 +129,28 @@ def now_playing(db_path: Path = Depends(get_db_path)) -> NowPlayingOut | None:
     """Qué está sonando ahora mismo, o `null` si la radio está apagada (o
     la biblioteca todavía está vacía) -- nunca un 500 por no tener nada
     que mostrar, mismo principio del resto del proyecto."""
-    conn = db.connect(db_path)
-    current = db.get_now_playing(conn)
-    if current is None:
-        return None
-    return NowPlayingOut(
-        track=TrackOut(
-            artist=current.track.artist,
-            title=current.track.title,
-            album=current.track.album,
-            year=current.track.year,
-        ),
-        started_at=current.started_at,
-    )
+    return _now_playing_payload(db_path)
+
+
+@app.websocket("/ws")
+async def now_playing_ws(
+    websocket: WebSocket,
+    db_path: Path = Depends(get_db_path),
+    poll_interval: float = Depends(get_poll_interval),
+) -> None:
+    """Empuja el "sonando ahora" apenas cambia, para que la página no
+    tenga que hacer polling HTTP por su cuenta. SQLite no tiene pub/sub
+    nativo -- este loop hace el polling del lado del servidor sobre
+    `now_playing`, un solo lugar leyendo la base cada `poll_interval`
+    en vez de una consulta HTTP por cada pestaña abierta."""
+    await websocket.accept()
+    last_sent: NowPlayingOut | None | object = object()  # nunca == al primer payload real
+    try:
+        while True:
+            payload = _now_playing_payload(db_path)
+            if payload != last_sent:
+                await websocket.send_json(payload.model_dump(mode="json") if payload else None)
+                last_sent = payload
+            await asyncio.sleep(poll_interval)
+    except WebSocketDisconnect:
+        pass
