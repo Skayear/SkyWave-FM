@@ -261,6 +261,7 @@ def play(
             while True:
                 with conn:
                     db.set_now_playing(conn, current.track)
+                    db.record_play_history(conn, current.track)
                 # El tema de acá suena en tiempo real (Decoder -re): de
                 # sobra para que este hilo tenga listo el siguiente
                 # guion+WAV antes de que haga falta.

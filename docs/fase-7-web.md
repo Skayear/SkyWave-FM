@@ -131,17 +131,53 @@ cambiar `now_playing` en la base) y a mano con dos pestañas del
 navegador abiertas contra `skywave play` corriendo: las dos se
 actualizan solas al cambiar de tema.
 
+### 5. Playlist de próximos temas (issue [#38](https://github.com/Skayear/SkyWave-FM/issues/38))
+
+Retomado después de Fase 8 arrancar en paralelo. `scheduler/selector.py`'s
+`pick_next()` elige un tema a la vez, de forma reactiva — no existe el
+concepto de "cola" de varios temas por venir. Para mostrar "a
+continuación" en la web sin diseñar todavía una cola real (pregunta
+abierta del propio issue), se resolvió como **vista previa aproximada**:
+
+- `library/db.py` suma `play_history` — tabla que registra cada tema
+  que arranca a sonar (`record_play_history()`, wireado en `cli.py`
+  junto a `set_now_playing()`). Deliberadamente **no se poda**: sirve
+  de log para debuguear repeticiones, además de alimentar la
+  proyección. `recent_play_history()` trae los últimos 20 (misma
+  ventana que ya usaba `cli.py` a mano) y `latest_play_history_id()`
+  da una semilla estable.
+- `GET /queue` en `app.py` proyecta los próximos 5 temas llamando a
+  `pick_next()` en secuencia con ese historial y un `random.Random`
+  propio (semilla = `latest_play_history_id()`) — sin tocar nada
+  persistido. Estable mientras no suene un tema nuevo (misma semilla,
+  misma respuesta); se recalcula entera cuando sí cambia. **No es una
+  cola garantizada**: `skywave play` y el server web son procesos
+  separados sin memoria compartida, así que el primer ítem no
+  necesariamente coincide con lo que el scheduler real vaya a elegir
+  si algo fuerza una relajación de ventana en el medio.
+- `index.html` pide `/queue` al cargar y de nuevo cada vez que el
+  WebSocket de #32 avisa que cambió el "sonando ahora" — mismo
+  mecanismo de refresco, sin agregar un segundo push por WebSocket
+  (una de las preguntas abiertas del issue original).
+
+Probado con tests (persistencia de `play_history`, endpoint con
+biblioteca vacía / con temas / estabilidad entre dos requests
+seguidos) y a mano en el navegador con `skywave play` al aire: la
+playlist se ve y cambia cuando cambia el tema.
+
 ## Ajustes no anticipados
 
-- Los issues #30, #31 y #32 aparecieron cerrados en GitHub el
-  2026-08-28 con comentarios que describían el trabajo como terminado
-  y citaban commits (`34b46d8`, `317b938`, `9390fb5`) que **no existen**
-  en ningún lado del repo (ni local, ni `origin`, ni ramas, ni objetos
-  sueltos) — tampoco había código correspondiente (`templates/`,
-  `greetings.py`, ruta `/ws` no existían). Todo indica que una sesión
-  de IA anterior alucinó haber completado la fase y cerró los issues
-  sin commitear nada. Se reabrieron los tres el 2026-08-28 antes de
-  retomar #30 de verdad.
+- Los issues #30, #31, #32, #36 y #38 aparecieron cerrados en GitHub
+  el 2026-08-28 con comentarios que describían el trabajo como
+  terminado y citaban commits (`34b46d8`, `317b938`, `9390fb5`,
+  `7a8aa52`, `6654078`) que **no existen** en ningún lado del repo (ni
+  local, ni `origin`, ni ramas, ni objetos sueltos) — tampoco había
+  código correspondiente (`templates/`, `greetings.py`, ruta `/ws`,
+  `play_history`, `scheduler/greetings.py` no existían). Todo indica
+  que una sesión de IA anterior alucinó haber completado varias
+  features y cerró los issues sin commitear nada. Se reabrieron todos
+  antes de retomarlos de verdad (#30-32 el 2026-08-28, #36 y #38 el
+  2026-08-30) — ver también docs/fase-4-el-locutor.md para #36.
 
 - `ruff`'s `B008` marca `Depends(...)` como default de argumento como
   sospechoso (en general, una llamada mutable en un default es un bug) —

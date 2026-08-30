@@ -22,6 +22,30 @@
     }
     #now-playing .titulo { font-size: 1.1rem; }
     #now-playing .artista { color: #999; }
+    #queue {
+      width: 100%;
+      max-width: 420px;
+      text-align: center;
+    }
+    #queue h2 {
+      font-size: 0.9rem;
+      color: #999;
+      font-weight: normal;
+      margin: 0 0 0.4rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    #queue-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      font-size: 0.9rem;
+    }
+    #queue-list li {
+      padding: 0.15rem 0;
+      color: #ccc;
+    }
+    #queue-list li span { color: #888; }
     #saludo-form {
       display: flex;
       flex-direction: column;
@@ -62,6 +86,11 @@
     <div class="artista" id="np-artista"></div>
   </div>
 
+  <div id="queue">
+    <h2>A continuación</h2>
+    <ul id="queue-list"></ul>
+  </div>
+
   <form id="saludo-form">
     <textarea
       id="saludo-mensaje"
@@ -90,6 +119,33 @@
       npArtista.textContent = data.track.artist;
     }
 
+    // "A continuación" (issue #38): vista previa aproximada, no una
+    // cola garantizada -- se recalcula cada vez que se pide. Elementos
+    // creados con textContent, no innerHTML: título/artista vienen de
+    // tags de audio, no son HTML de confianza.
+    const queueList = document.getElementById("queue-list");
+
+    async function actualizarCola() {
+      try {
+        const resp = await fetch("/queue");
+        const data = await resp.json();
+        queueList.replaceChildren(
+          ...data.upcoming.map((item) => {
+            const li = document.createElement("li");
+            const artista = document.createElement("span");
+            li.textContent = item.title + " — ";
+            artista.textContent = item.artist;
+            li.appendChild(artista);
+            return li;
+          })
+        );
+      } catch {
+        queueList.replaceChildren();
+      }
+    }
+
+    actualizarCola();
+
     // GET /ws empuja el "sonando ahora" apenas cambia -- nada de
     // polling HTTP desde acá. Si el socket se cae (proxy que corta
     // conexiones ociosas, reinicio del server), se reconecta solo.
@@ -97,7 +153,10 @@
       const protocolo = location.protocol === "https:" ? "wss:" : "ws:";
       const ws = new WebSocket(`${protocolo}//${location.host}/ws`);
 
-      ws.onmessage = (event) => pintarSonandoAhora(JSON.parse(event.data));
+      ws.onmessage = (event) => {
+        pintarSonandoAhora(JSON.parse(event.data));
+        actualizarCola(); // el tema cambió -- la proyección de "a continuación" también
+      };
       ws.onerror = () => ws.close();
       ws.onclose = () => setTimeout(conectarSonandoAhora, 3000);
     }

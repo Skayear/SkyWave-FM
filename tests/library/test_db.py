@@ -23,7 +23,7 @@ def test_connect_creates_schema(tmp_path: Path) -> None:
 
     tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
 
-    assert [row["name"] for row in tables] == ["tracks", "now_playing"]
+    assert [row["name"] for row in tables] == ["tracks", "now_playing", "play_history"]
 
 
 def test_connect_twice_on_same_file_does_not_fail(tmp_path: Path) -> None:
@@ -145,3 +145,72 @@ def test_set_now_playing_defaults_to_current_utc_time(tmp_path: Path) -> None:
 
     assert now is not None
     assert before <= now.started_at <= after
+
+
+def test_recent_play_history_orden_del_mas_viejo_al_mas_nuevo(tmp_path: Path) -> None:
+    conn = db.connect(tmp_path / "library.db")
+    first = _track()
+    second = _track(path=Path("/music/b/02 - y.flac"), title="Otro tema")
+
+    with conn:
+        db.upsert_track(conn, first)
+        db.upsert_track(conn, second)
+        db.record_play_history(conn, first, played_at=datetime(2026, 8, 30, 12, 0, 0, tzinfo=UTC))
+        db.record_play_history(conn, second, played_at=datetime(2026, 8, 30, 12, 3, 0, tzinfo=UTC))
+
+    assert db.recent_play_history(conn) == [first, second]
+
+
+def test_recent_play_history_respeta_el_limite(tmp_path: Path) -> None:
+    conn = db.connect(tmp_path / "library.db")
+    track = _track()
+
+    with conn:
+        db.upsert_track(conn, track)
+        for _ in range(5):
+            db.record_play_history(conn, track)
+
+    assert len(db.recent_play_history(conn, limit=3)) == 3
+
+
+def test_recent_play_history_vacio_sin_reproducciones(tmp_path: Path) -> None:
+    conn = db.connect(tmp_path / "library.db")
+
+    assert db.recent_play_history(conn) == []
+
+
+def test_play_history_no_se_poda_al_registrar(tmp_path: Path) -> None:
+    # A diferencia de now_playing (una sola fila), play_history acumula
+    # -- es un log, no un estado.
+    conn = db.connect(tmp_path / "library.db")
+    track = _track()
+
+    with conn:
+        db.upsert_track(conn, track)
+        for _ in range(3):
+            db.record_play_history(conn, track)
+
+    rows = conn.execute("SELECT COUNT(*) AS n FROM play_history").fetchone()
+    assert rows["n"] == 3
+
+
+def test_latest_play_history_id_vacio_es_cero(tmp_path: Path) -> None:
+    conn = db.connect(tmp_path / "library.db")
+
+    assert db.latest_play_history_id(conn) == 0
+
+
+def test_latest_play_history_id_crece_con_cada_registro(tmp_path: Path) -> None:
+    conn = db.connect(tmp_path / "library.db")
+    track = _track()
+
+    with conn:
+        db.upsert_track(conn, track)
+        db.record_play_history(conn, track)
+    first_id = db.latest_play_history_id(conn)
+
+    with conn:
+        db.record_play_history(conn, track)
+    second_id = db.latest_play_history_id(conn)
+
+    assert second_id > first_id

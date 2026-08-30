@@ -25,6 +25,15 @@ BOWIE = Track(
     duration_seconds=222.0,
 )
 
+ACDC = Track(
+    path=Path("/music/AC-DC - Back In Black/01 - Hells Bells.flac"),
+    artist="AC/DC",
+    title="Hells Bells",
+    album="Back In Black",
+    year=1980,
+    duration_seconds=312.0,
+)
+
 
 def _client(db_path: Path, poll_interval: float = 0.05) -> TestClient:
     """Cliente de pruebas con las dependencias overrideadas -- así cada
@@ -43,6 +52,7 @@ def test_index_sirve_html_con_el_reproductor(tmp_path: Path) -> None:
     assert "<audio" in response.text
     assert "/ws" in response.text  # el JS se conecta acá para el "sonando ahora"
     assert "saludo-form" in response.text  # el textbox de saludos (#31)
+    assert "queue-list" in response.text  # "a continuación" (#38)
 
 
 def test_now_playing_con_biblioteca_vacia_devuelve_null(tmp_path: Path) -> None:
@@ -117,6 +127,43 @@ def test_post_greeting_respeta_el_rate_limit(tmp_path: Path) -> None:
     response = client.post("/greetings", json={"message": "hola de nuevo!"})
 
     assert response.status_code == 429
+
+
+def test_queue_biblioteca_vacia_es_vacio(tmp_path: Path) -> None:
+    response = _client(tmp_path / "library.db").get("/queue")
+
+    assert response.status_code == 200
+    assert response.json() == {"upcoming": []}
+
+
+def test_queue_devuelve_los_proximos_cinco_temas(tmp_path: Path) -> None:
+    db_path = tmp_path / "library.db"
+    conn = db.connect(db_path)
+    with conn:
+        for track in (QUEEN, BOWIE, ACDC):
+            db.upsert_track(conn, track)
+
+    response = _client(db_path).get("/queue")
+
+    assert response.status_code == 200
+    upcoming = response.json()["upcoming"]
+    assert len(upcoming) == 5
+    assert all(t["artist"] in {"Queen", "David Bowie", "AC/DC"} for t in upcoming)
+
+
+def test_queue_es_estable_mientras_no_cambia_nada(tmp_path: Path) -> None:
+    db_path = tmp_path / "library.db"
+    conn = db.connect(db_path)
+    with conn:
+        for track in (QUEEN, BOWIE, ACDC):
+            db.upsert_track(conn, track)
+        db.record_play_history(conn, QUEEN)
+
+    client = _client(db_path)
+    first = client.get("/queue").json()
+    second = client.get("/queue").json()
+
+    assert first == second
 
 
 def test_ws_primer_mensaje_es_null_si_no_suena_nada(tmp_path: Path) -> None:

@@ -27,6 +27,13 @@ _SCHEMA = [
         started_at TEXT NOT NULL
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS play_history (
+        id INTEGER PRIMARY KEY,
+        path TEXT NOT NULL,
+        played_at TEXT NOT NULL
+    )
+    """,
 ]
 
 
@@ -129,3 +136,44 @@ def get_now_playing(conn: sqlite3.Connection) -> NowPlaying | None:
         track=_track_from_row(row),
         started_at=datetime.fromisoformat(row["started_at"]),
     )
+
+
+def record_play_history(
+    conn: sqlite3.Connection, track: Track, played_at: datetime | None = None
+) -> None:
+    """Registra que este track empezó a sonar. Deliberadamente **no se
+    poda**: sirve de log para debuguear repeticiones y es la fuente de
+    `recent_play_history()`/`latest_play_history_id()` que usa `GET
+    /queue` (issue #38) para proyectar los próximos temas. No hace
+    commit, mismo criterio que `upsert_track`."""
+    if played_at is None:
+        played_at = datetime.now(UTC)
+    conn.execute(
+        "INSERT INTO play_history (path, played_at) VALUES (?, ?)",
+        (str(track.path), played_at.isoformat()),
+    )
+
+
+def recent_play_history(conn: sqlite3.Connection, limit: int = 20) -> list[Track]:
+    """Últimos `limit` tracks reproducidos, del más viejo al más nuevo --
+    mismo orden y misma ventana (20) que el `history` que arma `cli.py`
+    a mano, para alimentar `pick_next()` con una ventana de
+    no-repetición equivalente."""
+    rows = conn.execute(
+        """
+        SELECT t.path, t.artist, t.title, t.album, t.year, t.duration_seconds
+        FROM play_history p JOIN tracks t ON t.path = p.path
+        ORDER BY p.id DESC LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    return [_track_from_row(row) for row in reversed(rows)]
+
+
+def latest_play_history_id(conn: sqlite3.Connection) -> int:
+    """Id de la última fila de `play_history`, o 0 si está vacía --
+    semilla del `random.Random` de `GET /queue`: mientras no suene un
+    tema nuevo, la proyección de próximos temas es estable en vez de
+    saltar en cada request."""
+    row = conn.execute("SELECT MAX(id) FROM play_history").fetchone()
+    return row[0] or 0
