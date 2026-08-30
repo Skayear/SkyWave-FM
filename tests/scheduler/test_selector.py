@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from skywave.library.track import Track
-from skywave.scheduler.selector import pick_next
+from skywave.scheduler.selector import pick_next, plan_queue
 
 
 def _track(artist: str, title: str, duration: float = 180.0) -> Track:
@@ -111,3 +111,50 @@ def test_night_block_is_ignored_if_no_short_tracks_exist() -> None:
     track = pick_next(catalog, [], rng=random.Random(1), now=MADRUGADA)
 
     assert track == EPICO
+
+
+def test_plan_queue_completa_hasta_la_profundidad_pedida() -> None:
+    planned = plan_queue(CATALOG, [], [], target_depth=3, rng=random.Random(1))
+
+    assert len(planned) == 3
+
+
+def test_plan_queue_cuenta_lo_ya_encolado() -> None:
+    # Ya hay 2 en la cola, target_depth=3: solo hace falta 1 más.
+    planned = plan_queue(CATALOG, [], [QUEEN, EUROPE], target_depth=3, rng=random.Random(1))
+
+    assert len(planned) == 1
+
+
+def test_plan_queue_vacio_si_ya_llego_a_la_profundidad() -> None:
+    already_queued = [QUEEN, EUROPE, ELO]
+
+    planned = plan_queue(CATALOG, [], already_queued, target_depth=3, rng=random.Random(1))
+
+    assert planned == []
+
+
+def test_plan_queue_no_repite_artista_ya_encolado() -> None:
+    # Queen y Europe ya están en la cola: el único candidato es ELO.
+    planned = plan_queue(
+        CATALOG, [], [QUEEN, EUROPE], target_depth=3, no_repeat_artist=2, rng=random.Random(1)
+    )
+
+    assert planned == [ELO]
+
+
+def test_plan_queue_considera_history_y_cola_juntos() -> None:
+    # Queen sonó de verdad, Europe ya está en la cola: falta 1 más para
+    # llegar a target_depth=2, y ninguno de los dos debería repetirse.
+    planned = plan_queue(
+        CATALOG, [QUEEN], [EUROPE], target_depth=2, no_repeat_artist=2, rng=random.Random(1)
+    )
+
+    assert planned == [ELO]
+
+
+def test_plan_queue_deterministico_con_seed_fija() -> None:
+    first = plan_queue(CATALOG, [], [], target_depth=3, rng=random.Random(42))
+    second = plan_queue(CATALOG, [], [], target_depth=3, rng=random.Random(42))
+
+    assert first == second

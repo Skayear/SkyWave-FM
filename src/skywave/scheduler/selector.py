@@ -69,3 +69,39 @@ def pick_next(
             return rng.choice(candidates)
 
     raise AssertionError("inalcanzable: con window=0 siempre hay candidatos")
+
+
+def plan_queue(
+    catalog: Sequence[Track],
+    history: Sequence[Track],
+    already_queued: Sequence[Track],
+    *,
+    target_depth: int,
+    no_repeat_artist: int = 3,
+    rng: random.Random | None = None,
+    now: datetime | None = None,
+) -> list[Track]:
+    """Temas nuevos para completar la cola planificada hasta
+    `target_depth` (issue #40) -- no toca nada persistido, quien llama
+    decide qué hacer con el resultado (`library.db.enqueue_track`).
+
+    `already_queued` son los temas que ya están en la cola pero todavía
+    no sonaron: cuentan para la ventana de no-repetición igual que
+    `history`, así no se planifica el mismo artista dos veces seguidas
+    dentro de la cola. Si la cola ya llegó a `target_depth`, devuelve
+    una lista vacía."""
+    missing = target_depth - len(already_queued)
+    if missing <= 0:
+        return []
+    if rng is None:
+        rng = random.Random()
+
+    working_history = list(history) + list(already_queued)
+    planned: list[Track] = []
+    for _ in range(missing):
+        track = pick_next(
+            catalog, working_history, no_repeat_artist=no_repeat_artist, rng=rng, now=now
+        )
+        planned.append(track)
+        working_history.append(track)
+    return planned

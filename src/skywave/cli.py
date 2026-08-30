@@ -28,7 +28,7 @@ from skywave.mixer.encoder import Encoder
 from skywave.mixer.player import DEFAULT_CROSSFADE_SECONDS, play_ducked, play_track
 from skywave.scheduler.ads import pick_next_ad, should_play_ad
 from skywave.scheduler.greetings import should_read_greeting
-from skywave.scheduler.selector import pick_next
+from skywave.scheduler.selector import plan_queue
 from skywave.web import greetings as web_greetings
 
 app = typer.Typer()
@@ -50,6 +50,9 @@ _AdsOutDirOption = typer.Option(
     Path("assets/ads"), "--out-dir", help="Carpeta donde se escriben los WAV renderizados."
 )
 DEFAULT_ADS_DIR = Path("assets/ads")
+#: Cuántos temas planifica por adelantado `upcoming_queue` (issue #40)
+#: -- mismo número que mostraba "a continuación" en la web desde #38.
+QUEUE_DEPTH = 5
 
 
 @app.command()
@@ -214,16 +217,51 @@ def play(
     if leer_saludos:
         with conn:
             web_greetings.ensure_schema(conn)
+    # Plan de una corrida anterior (crash, o un --no-repeat-artist
+    # distinto): mejor arrancar con la cola vacía que arrastrar un plan
+    # que ya no corresponde -- mismo criterio que now_playing.
+    with conn:
+        db.clear_upcoming_queue(conn)
     icecast_url = _icecast_url(mount)
     console.print(f"Al aire con {len(catalog)} tracks -> [bold]{mount}[/bold] (Ctrl+C para cortar)")
     history: list[Track] = []
 
     def _prepare_next(previous_track: Track | None) -> _Prepared:
-        """Elige el próximo tema y le arma la intervención (guion + WAV).
-        Corre en el hilo de fondo mientras suena el tema actual — issue
-        #20: para cuando termine ese tema, esta ya está lista y entra sin
-        aire muerto."""
-        track = pick_next(catalog, history, no_repeat_artist=no_repeat_artist)
+        """Planifica hasta `QUEUE_DEPTH` en `upcoming_queue` (issue #40)
+        si hace falta y arma la intervención (guion + WAV) del primero
+        de la cola. Corre en el hilo de fondo mientras suena el tema
+        actual — issue #20: para cuando termine ese tema, esta ya está
+        lista y entra sin aire muerto.
+
+        Ojo: solo **mira** el primero de la cola (`peek_queue`), no lo
+        saca todavía. Esta función corre un paso adelantada a lo que
+        efectivamente está sonando -- si sacara el tema acá, `GET
+        /queue` mostraría el que viene *después* del próximo real (el
+        próximo real ya estaría afuera de la tabla, resuelto en este
+        `Future` pero sin sonar todavía). Quien saca de la cola es el
+        loop principal, recién cuando este resultado pasa a ser
+        `current` de verdad (ver más abajo).
+
+        Conexión propia a la base (`db.connect`, no el `conn` del hilo
+        principal): esta función corre en el hilo de fondo de
+        `prep_pool`, y `sqlite3.Connection` no es segura para compartir
+        entre threads -- mismo criterio que `web/app.py`, que abre una
+        conexión nueva por request en vez de compartir una global."""
+        queue_conn = db.connect(db_path)
+        with queue_conn:
+            already_queued = db.peek_queue(queue_conn, limit=QUEUE_DEPTH)
+            nuevos = plan_queue(
+                catalog,
+                history,
+                already_queued,
+                target_depth=QUEUE_DEPTH,
+                no_repeat_artist=no_repeat_artist,
+            )
+            for nuevo in nuevos:
+                db.enqueue_track(queue_conn, nuevo)
+        planned = db.peek_queue(queue_conn, limit=1)
+        assert planned  # target_depth >= 1 garantiza al menos un tema planeado
+        track = planned[0]
         history.append(track)
         # El historial solo alimenta la ventana de no-repetición: con
         # quedarnos los últimos temas alcanza, no crece infinito.
@@ -262,6 +300,11 @@ def play(
                 with conn:
                     db.set_now_playing(conn, current.track)
                     db.record_play_history(conn, current.track)
+                    # Recién ahora `current` deja de ser una vista previa y
+                    # pasa a sonar de verdad -- se saca de upcoming_queue
+                    # en este momento, no antes (ver el comentario en
+                    # _prepare_next sobre por qué no se saca ahí).
+                    db.dequeue_next(conn)
                 # El tema de acá suena en tiempo real (Decoder -re): de
                 # sobra para que este hilo tenga listo el siguiente
                 # guion+WAV antes de que haga falta.
@@ -353,3 +396,4 @@ def play(
         prep_pool.shutdown(wait=False, cancel_futures=True)
         with conn:
             db.clear_now_playing(conn)
+            db.clear_upcoming_queue(conn)

@@ -1,6 +1,5 @@
 import asyncio
 import os
-import random
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -10,16 +9,12 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator
 
 from skywave.library import db
-from skywave.library.track import Track
-from skywave.scheduler.selector import pick_next
 from skywave.web import greetings
 
-#: Cuántos temas adelante proyecta GET /queue, y con qué ventana de
-#: no-repetición -- mismo default que el `--no-repeat-artist` de
-#: `skywave play`, aunque el server web no sabe con qué flag arrancó
-#: la radio real (son procesos separados, sin memoria compartida).
+#: Cuántos temas adelante muestra GET /queue -- tope de lectura sobre
+#: la cola real que mantiene `skywave play` (issue #40), no un límite
+#: de cuántos hay planificados.
 _QUEUE_SIZE = 5
-_QUEUE_NO_REPEAT_ARTIST = 3
 
 #: Mismo default que la CLI (`skywave scan`/`skywave play`): el SQLite de
 #: la biblioteca en el cwd -- no hay config.toml todavía.
@@ -104,38 +99,15 @@ def _now_playing_payload(db_path: Path) -> NowPlayingOut | None:
     )
 
 
-def _project_queue(db_path: Path) -> list[Track]:
-    """Vista previa aproximada de los próximos `_QUEUE_SIZE` temas
-    (issue #38) -- **no** es una cola garantizada: `skywave play` y
-    este server son procesos separados sin memoria compartida, así que
-    esto simula llamando a `pick_next()` con el historial real
-    (`play_history`) y un `random.Random` propio, sin tocar nada
-    persistido. Si algo cambia de verdad (el tema real avanza, se
-    escanea música nueva), la próxima consulta recalcula entera --
-    no hay continuidad garantizada entre un request y el siguiente.
-
-    La semilla es `latest_play_history_id()`: mientras no suene un tema
-    nuevo la proyección es estable (misma respuesta en cada request),
-    en vez de saltar al azar cada vez que se consulta."""
-    conn = db.connect(db_path)
-    catalog = db.list_tracks(conn)
-    if not catalog:
-        return []
-
-    history = db.recent_play_history(conn)
-    rng = random.Random(db.latest_play_history_id(conn))
-    upcoming: list[Track] = []
-    for _ in range(_QUEUE_SIZE):
-        track = pick_next(catalog, history, no_repeat_artist=_QUEUE_NO_REPEAT_ARTIST, rng=rng)
-        upcoming.append(track)
-        history.append(track)
-    return upcoming
-
-
 @app.get("/queue")
 def queue(db_path: Path = Depends(get_db_path)) -> QueueOut:
-    """Los próximos temas, como vista previa -- ver `_project_queue`."""
-    upcoming = _project_queue(db_path)
+    """Los próximos temas que `skywave play` ya planificó (issue #40) --
+    lee `upcoming_queue` directo, no simula nada: el primer ítem es
+    garantizado ser el próximo tema real (si `skywave play` está
+    corriendo y mantuvo la cola llena; si no, vacío -- ver #38 para el
+    enfoque anterior por simulación, que este issue reemplazó)."""
+    conn = db.connect(db_path)
+    upcoming = db.peek_queue(conn, limit=_QUEUE_SIZE)
     return QueueOut(
         upcoming=[
             TrackOut(artist=t.artist, title=t.title, album=t.album, year=t.year) for t in upcoming

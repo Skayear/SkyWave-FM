@@ -159,10 +159,11 @@ uv run uvicorn skywave.web.app:app --reload
 `GET /` sirve una página con el reproductor (`<audio>` apuntando al
 mount de Icecast), el tema sonando en vivo por WebSocket (`GET /ws`,
 se reconecta solo si se corta), una playlist "a continuación" (`GET
-/queue`, vista previa aproximada de los próximos 5 temas, no una cola
-garantizada), y un textbox para mandar un saludo (`POST /greetings`,
-con moderación de palabras prohibidas y rate limit por IP — el
-locutor los lee al aire cada N temas, ver `--saludos-every` arriba).
+/queue`, cola real que `skywave play` planifica por adelantado —
+`--no-repeat-artist` también aplica a la cola, ver arriba), y un
+textbox para mandar un saludo (`POST /greetings`, con moderación de
+palabras prohibidas y rate limit por IP — el locutor los lee al aire
+cada N temas, ver `--saludos-every` arriba).
 `GET /now-playing` sigue disponible como endpoint JSON simple (devuelve
 `null` si la radio está apagada).
 

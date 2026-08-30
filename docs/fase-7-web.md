@@ -165,6 +165,55 @@ biblioteca vacía / con temas / estabilidad entre dos requests
 seguidos) y a mano en el navegador con `skywave play` al aire: la
 playlist se ve y cambia cuando cambia el tema.
 
+(Esta simulación por `pick_next()` se reemplazó por una cola real
+persistida en el #40 — ver más abajo. `recent_play_history()` y
+`latest_play_history_id()` se borraron: quedaron sin uso.)
+
+### 6. Cola garantizada, sin simular (issue [#40](https://github.com/Skayear/SkyWave-FM/issues/40))
+
+Reemplaza la vista previa aproximada del #38 por una cola real:
+`skywave play` planifica por adelantado en vez de que la web adivine.
+
+- `library/db.py` suma `upcoming_queue` (FIFO) con `enqueue_track()`,
+  `dequeue_next()`, `peek_queue()`, `clear_upcoming_queue()` — CRUD
+  simple, mismo estilo que el resto del módulo.
+- `scheduler/selector.py` suma `plan_queue()`: función pura que decide
+  qué temas nuevos hacen falta para completar la cola hasta
+  `target_depth`, dado lo que ya está encolado (cuenta para la ventana
+  de no-repetición igual que `history`) — no toca la base, mismo
+  patrón que `pick_next()`.
+- `cli.py`: `_prepare_next()` rellena `upcoming_queue` con `plan_queue()`
+  y **mira** (no saca) el primero. `GET /queue` en `app.py` se
+  simplificó a leer `peek_queue()` directo — ya no simula nada, ni
+  importa `pick_next`/`random`.
+
+**Bug real encontrado a mano probando en vivo** (no lo agarró ningún
+test): `_prepare_next()` corre en el hilo de fondo de `prep_pool` con
+su propia conexión (necesario -- `sqlite3.Connection` no es segura
+entre threads, encontrado también a mano: la primera versión compartía
+el `conn` del hilo principal y explotaba con `ProgrammingError` en el
+segundo tema). Con esa conexión propia resuelta, apareció un segundo
+bug de diseño: `_prepare_next()` corre **un paso adelantado** al tema
+que realmente suena (issue #20, para evitar aire muerto) — si sacaba
+el tema de `upcoming_queue` en esa misma llamada, para cuando `GET
+/queue` se consultaba, el tema *inmediato siguiente* ya estaba afuera
+de la tabla (resuelto en el `Future`, sonando todavía no). El primer
+ítem que mostraba la web en realidad era el que suena **después** del
+próximo, no el próximo — confirmado a mano: la web mostró "The Girl Is
+Mine" pero al terminar el tema sonó "Seven Seas Of Rhye". Se corrigió
+separando las dos responsabilidades: `_prepare_next()` solo *mira*
+(`peek_queue`) y prepara la intervención; recién se saca de la cola
+(`dequeue_next`) en el loop principal, en el mismo momento en que ese
+tema pasa a ser `now_playing` de verdad. Confirmado de nuevo a mano:
+el primer ítem de la cola coincidió con el tema que arrancó después,
+dos veces seguidas.
+
+Probado con tests (`plan_queue()` puro, CRUD de `upcoming_queue`,
+`GET /queue` leyendo lo persistido) y a mano al aire con `skywave play`
++ el server real: confirmado que el primer ítem de "a continuación"
+es exactamente el próximo tema, y que la cola se corre (no se
+recalcula entera) cuando cambia.
+
 ## Ajustes no anticipados
 
 - Los issues #30, #31, #32, #36 y #38 aparecieron cerrados en GitHub
