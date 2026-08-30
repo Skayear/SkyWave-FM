@@ -98,6 +98,31 @@ def list_tracks(db_path: Path = _DbOption) -> None:
     console.print(table)
 
 
+_ArtistArgument = typer.Argument(
+    ..., help="Nombre exacto del artista, como aparece en `skywave list`."
+)
+
+
+@app.command()
+def exclude(artist: str = _ArtistArgument, db_path: Path = _DbOption) -> None:
+    """Excluye un artista de la rotación de `skywave play` (issue #41).
+    No borra nada de la biblioteca -- `skywave list`/`scan` lo siguen
+    mostrando, solo la radio lo salta."""
+    conn = db.connect(db_path)
+    with conn:
+        db.exclude_artist(conn, artist)
+    console.print(f"[bold]{artist}[/bold] excluido de la rotación.")
+
+
+@app.command(name="include")
+def include_artist_command(artist: str = _ArtistArgument, db_path: Path = _DbOption) -> None:
+    """Vuelve a incluir un artista excluido con `skywave exclude`."""
+    conn = db.connect(db_path)
+    with conn:
+        db.include_artist(conn, artist)
+    console.print(f"[bold]{artist}[/bold] vuelve a sonar.")
+
+
 @app.command(name="render-ads")
 def render_ads_command(
     scripts_dir: Path = _AdsScriptsDirOption,
@@ -203,6 +228,19 @@ def play(
             "La biblioteca está vacía. Corré [bold]skywave scan <carpeta>[/bold] primero."
         )
         raise typer.Exit()
+
+    # Exclusión de artistas (issue #41): no toca la biblioteca, solo el
+    # catálogo que ve pick_next/plan_queue -- skywave list los sigue
+    # mostrando.
+    excluded = db.excluded_artists(conn)
+    if excluded:
+        catalog = [track for track in catalog if track.artist not in excluded]
+        if not catalog:
+            console.print(
+                "Todos los artistas de la biblioteca están excluidos "
+                "([bold]skywave include <artista>[/bold] para sacar alguno)."
+            )
+            raise typer.Exit()
 
     host = _build_locutor() if locutor else None
     # Publicidades pre-renderizadas (issue #25/#26): si no hay ninguna

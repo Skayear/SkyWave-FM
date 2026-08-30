@@ -28,6 +28,7 @@ def test_connect_creates_schema(tmp_path: Path) -> None:
         "now_playing",
         "play_history",
         "upcoming_queue",
+        "excluded_artists",
     ]
 
 
@@ -236,3 +237,47 @@ def test_clear_upcoming_queue(tmp_path: Path) -> None:
         db.clear_upcoming_queue(conn)
 
     assert db.peek_queue(conn) == []
+
+
+def test_exclude_artist(tmp_path: Path) -> None:
+    conn = db.connect(tmp_path / "library.db")
+
+    with conn:
+        db.exclude_artist(conn, "Nickelback")
+
+    assert db.excluded_artists(conn) == {"Nickelback"}
+
+
+def test_exclude_artist_dos_veces_no_falla(tmp_path: Path) -> None:
+    conn = db.connect(tmp_path / "library.db")
+
+    with conn:
+        db.exclude_artist(conn, "Nickelback")
+        db.exclude_artist(conn, "Nickelback")
+
+    assert db.excluded_artists(conn) == {"Nickelback"}
+
+
+def test_include_artist_lo_saca_de_excluidos(tmp_path: Path) -> None:
+    conn = db.connect(tmp_path / "library.db")
+
+    with conn:
+        db.exclude_artist(conn, "Nickelback")
+        db.include_artist(conn, "Nickelback")
+
+    assert db.excluded_artists(conn) == set()
+
+
+def test_include_artist_no_excluido_no_falla(tmp_path: Path) -> None:
+    conn = db.connect(tmp_path / "library.db")
+
+    with conn:
+        db.include_artist(conn, "Queen")  # nunca estuvo excluido
+
+    assert db.excluded_artists(conn) == set()
+
+
+def test_excluded_artists_vacio_por_default(tmp_path: Path) -> None:
+    conn = db.connect(tmp_path / "library.db")
+
+    assert db.excluded_artists(conn) == set()

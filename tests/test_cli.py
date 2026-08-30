@@ -4,6 +4,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from skywave.cli import app
+from skywave.library import db
 
 FIXTURES = Path(__file__).parent / "fixtures" / "library"
 runner = CliRunner()
@@ -53,3 +54,15 @@ def test_scan_on_nonexistent_folder_fails_cleanly(tmp_path: Path) -> None:
     )
 
     assert result.exit_code != 0
+
+
+def test_exclude_then_include_roundtrip(tmp_path: Path) -> None:
+    db_path = tmp_path / "library.db"
+
+    exclude_result = runner.invoke(app, ["exclude", "Nickelback", "--db", str(db_path)])
+    assert exclude_result.exit_code == 0
+    assert db.excluded_artists(db.connect(db_path)) == {"Nickelback"}
+
+    include_result = runner.invoke(app, ["include", "Nickelback", "--db", str(db_path)])
+    assert include_result.exit_code == 0
+    assert db.excluded_artists(db.connect(db_path)) == set()

@@ -40,6 +40,11 @@ _SCHEMA = [
         path TEXT NOT NULL
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS excluded_artists (
+        artist TEXT PRIMARY KEY
+    )
+    """,
 ]
 
 
@@ -201,3 +206,24 @@ def clear_upcoming_queue(conn: sqlite3.Connection) -> None:
     `skywave play`, mismo criterio que `clear_now_playing`: mejor
     ninguna fila que un plan viejo de una corrida anterior."""
     conn.execute("DELETE FROM upcoming_queue")
+
+
+def exclude_artist(conn: sqlite3.Connection, artist: str) -> None:
+    """Marca un artista como excluido de la rotación (issue #41). No
+    toca la biblioteca (`tracks`): `skywave list`/`scan` lo siguen
+    mostrando, solo `skywave play` lo salta. `INSERT OR IGNORE` porque
+    excluir dos veces al mismo artista no es un error, es un no-op."""
+    conn.execute("INSERT OR IGNORE INTO excluded_artists (artist) VALUES (?)", (artist,))
+
+
+def include_artist(conn: sqlite3.Connection, artist: str) -> None:
+    """Saca a un artista de la lista de excluidos. No falla si no
+    estaba excluido -- mismo espíritu no-op que `exclude_artist`."""
+    conn.execute("DELETE FROM excluded_artists WHERE artist = ?", (artist,))
+
+
+def excluded_artists(conn: sqlite3.Connection) -> set[str]:
+    """Nombres de artista excluidos, para filtrar el catálogo en
+    `cli.py` antes de pasarlo a `pick_next`/`plan_queue`."""
+    rows = conn.execute("SELECT artist FROM excluded_artists").fetchall()
+    return {row["artist"] for row in rows}

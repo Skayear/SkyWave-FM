@@ -129,6 +129,8 @@ Si cambiás `.env`, correr de nuevo `./scripts/render-icecast-config.sh` y
 | `skywave list` | Lista la biblioteca en una tabla (artista, título, año, álbum) |
 | `skywave play` | Radio continua: rotación, locutor entre temas, publicidades, hasta Ctrl+C |
 | `skywave render-ads` | Sintetiza a WAV las publicidades curadas a mano en `assets/ads/scripts/*.txt` (voz + colchón + stinger), a `assets/ads/*.wav` |
+| `skywave exclude <artista>` | Saca un artista de la rotación de `play` (no lo borra de la biblioteca) |
+| `skywave include <artista>` | Vuelve a incluir un artista excluido |
 
 | Opción | Comandos | Qué hace |
 |--------|----------|----------|

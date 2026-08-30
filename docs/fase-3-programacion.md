@@ -74,6 +74,32 @@ Deliberadamente mínimo: la interfaz queda preparada, pero configurar
 bloques por género/franja necesita metadata que la biblioteca todavía no
 tiene. Se profundiza cuando crezca.
 
+## Seguimiento posterior a la fase
+
+### Excluir artistas de la rotación (issue [#41](https://github.com/Skayear/SkyWave-FM/issues/41))
+
+Retomado bastante después de cerrada la fase, mientras se trabajaba en
+Fase 8. No había forma de sacar una banda de la rotación sin borrarla
+físicamente de la biblioteca.
+
+- Tabla nueva `excluded_artists` en `library/db.py` (`exclude_artist`,
+  `include_artist`, `excluded_artists`) — separada de `tracks` a
+  propósito, mismo criterio que `greetings`/`upcoming_queue`: es una
+  preferencia de la radio, no un dato de la biblioteca.
+- Se filtra en `cli.py`, sobre el catálogo de `play()` antes de
+  pasarlo a `pick_next`/`plan_queue` — `skywave list`/`scan` no se
+  enteran, siguen mostrando todo lo escaneado.
+- Coincidencia exacta de `artist` (mismo criterio que ya usa la
+  ventana de no-repetición) — sin variantes de grafía, se deja para
+  si hace falta más adelante.
+- Dos subcomandos nuevos: `skywave exclude <artista>` / `skywave
+  include <artista>`.
+
+Probado con tests (CRUD puro, roundtrip por CLI) y a mano contra la
+biblioteca real: excluir "Mägo de Oz" bajó el catálogo de `skywave
+play` de 1341 a 1080 temas (exactamente los 261 tracks del artista),
+sin sacarlos de `skywave list`; ninguno apareció en `/queue`.
+
 ## Ajustes no anticipados
 
 - **El fallback de Fase 1 confunde álbum con artista en carpetas
