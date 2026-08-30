@@ -42,6 +42,12 @@ _COLETILLAS = (
     "",  # a veces el locutor no agrega nada, para no sonar repetitivo
 )
 
+_INTRODUCCIONES_SALUDO = (
+    "Nos escriben:",
+    "Llegó un saludo por la web:",
+    "Un oyente nos manda esto:",
+)
+
 
 def _franja(hour: int) -> str:
     for horas, nombre in _FRANJAS:
@@ -86,3 +92,14 @@ def render_script(
         parts.append(coletilla)
 
     return " ".join(parts)
+
+
+def render_greeting_script(message: str, *, rng: random.Random | None = None) -> str:
+    """Guion fijo para leer un saludo de un oyente al aire (issue #36).
+
+    Sin LLM: el mensaje ya lo escribió una persona, generarlo de nuevo no
+    tiene sentido -- solo hace falta una introducción que lo enmarque."""
+    if rng is None:
+        rng = random.Random()
+    intro = rng.choice(_INTRODUCCIONES_SALUDO)
+    return f"{intro} «{message}»."

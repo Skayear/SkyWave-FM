@@ -18,6 +18,7 @@ from skywave.host.scripts import (
     TemplateGenerator,
     english_terms_for,
 )
+from skywave.host.templates import render_greeting_script
 from skywave.host.tts import DEFAULT_VOICE, Synthesizer
 from skywave.library import db
 from skywave.library.scanner import find_audio_files
@@ -26,7 +27,9 @@ from skywave.library.track import Track
 from skywave.mixer.encoder import Encoder
 from skywave.mixer.player import DEFAULT_CROSSFADE_SECONDS, play_ducked, play_track
 from skywave.scheduler.ads import pick_next_ad, should_play_ad
+from skywave.scheduler.greetings import should_read_greeting
 from skywave.scheduler.selector import pick_next
+from skywave.web import greetings as web_greetings
 
 app = typer.Typer()
 console = Console()
@@ -181,6 +184,12 @@ def play(
     ads_every: int = typer.Option(
         8, "--ads-every", help="Cada cuántos temas suena una publicidad."
     ),
+    saludos: bool = typer.Option(
+        True, "--saludos/--sin-saludos", help="Leer al aire los saludos que llegan por la web."
+    ),
+    saludos_every: int = typer.Option(
+        5, "--saludos-every", help="Cada cuántos temas se lee un saludo pendiente."
+    ),
 ) -> None:
     """Sale al aire en modo radio: suena indefinidamente hasta Ctrl+C."""
     conn = db.connect(db_path)
@@ -198,6 +207,13 @@ def play(
     # sin publicidades — mismo principio de siempre, nunca se queda muda
     # por falta de una pieza opcional.
     ads = list_ads(DEFAULT_ADS_DIR) if publicidades else []
+    # Los saludos necesitan la misma voz que el locutor (Kokoro) para
+    # sintetizarse en vivo -- si el locutor está apagado o sin voz
+    # disponible, no hay forma de leerlos al aire.
+    leer_saludos = saludos and host is not None
+    if leer_saludos:
+        with conn:
+            web_greetings.ensure_schema(conn)
     icecast_url = _icecast_url(mount)
     console.print(f"Al aire con {len(catalog)} tracks -> [bold]{mount}[/bold] (Ctrl+C para cortar)")
     history: list[Track] = []
@@ -238,6 +254,7 @@ def play(
     prep_pool = ThreadPoolExecutor(max_workers=1)
     tracks_since_ad = 0
     ad_history: list[Path] = []
+    tracks_since_greeting = 0
     try:
         current = _prepare_next(None)
         with Encoder(icecast_url) as encoder:
@@ -298,6 +315,32 @@ def play(
                         pending_tail = b""
                     console.print(f"📢 {_ad_display_name(ad_path)}")
                     play_track(encoder, ad_path)
+
+                tracks_since_greeting += 1
+                if leer_saludos and should_read_greeting(
+                    tracks_since_greeting, every=saludos_every
+                ):
+                    pendientes = web_greetings.unread_greetings(conn)
+                    if pendientes:
+                        tracks_since_greeting = 0
+                        greeting = pendientes[0]
+                        try:
+                            assert host is not None  # leer_saludos ya lo garantiza
+                            _, cache = host
+                            script = render_greeting_script(greeting.message)
+                            wav_path = cache.wav_for(script)
+                            if pending_tail:
+                                encoder.write(pending_tail)
+                                pending_tail = b""
+                            console.print(f"💬 {script}")
+                            play_track(encoder, wav_path)
+                            with conn:
+                                web_greetings.mark_greeting_read(conn, greeting.id)
+                        except Exception as error:
+                            console.print(
+                                f"[yellow]No se pudo leer el saludo ({error}), "
+                                "sigue la música.[/yellow]"
+                            )
 
                 current = next_future.result()
     except KeyboardInterrupt:

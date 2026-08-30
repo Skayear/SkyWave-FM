@@ -89,6 +89,41 @@ En el loop de `skywave play`: guion → WAV cacheado → suena → tema.
 avisando. Nada del locutor puede voltear la música: cualquier excepción del
 pipeline de voz se reporta y el tema entra igual.
 
+### 6. El locutor lee los saludos de los oyentes (issue [#36](https://github.com/Skayear/SkyWave-FM/issues/36))
+
+Retomado después de Fase 7 (los saludos de `POST /greetings`, issue #31,
+necesitaban alguien que los lea). Mismo patrón que las publicidades
+(`scheduler/ads.py`), pero la síntesis es en vivo, no pre-renderizada —
+un saludo es texto libre de un oyente, no se puede curar a mano de
+antemano.
+
+- **Persistencia** (`web/greetings.py`): columna `read_at` nueva en la
+  tabla `greetings`, con una migración real en `ensure_schema()`
+  (`PRAGMA table_info` + `ALTER TABLE ADD COLUMN` si falta) — `CREATE
+  TABLE IF NOT EXISTS` no suma columnas a una tabla que ya existe, y el
+  `skywave.db` de Pablo ya tenía saludos guardados desde #31. Probado
+  contra ese archivo real antes de seguir. `unread_greetings()` trae los
+  pendientes en orden FIFO; `mark_greeting_read()` los saca de la cola.
+- **Guion fijo** (`host/templates.py`): `render_greeting_script(mensaje)`
+  — sin LLM, el texto ya lo escribió una persona, generarlo de nuevo no
+  tiene sentido. Solo una introducción corta que lo enmarca.
+- **Rotación** (`scheduler/greetings.py`, nuevo): `should_read_greeting`
+  es la mitad de simple que `should_play_ad` — no hace falta elegir
+  *cuál* leer (FIFO puro), solo *cuándo* toca revisar la cola.
+- **Wiring en `cli.py`**: `--saludos/--sin-saludos`, `--saludos-every N`
+  (default 5). Requiere que el locutor esté prendido y con voz
+  disponible (`host is not None`) — un saludo se sintetiza con la misma
+  `VoiceCache`/Kokoro del locutor, no tiene sentido levantar un segundo
+  motor de voz solo para esto. Se inserta entre temas como una
+  publicidad (`play_track`, no ducking), pero si no hay saludos
+  pendientes el contador no se resetea: sigue chequeando en cada tema
+  hasta que llega uno.
+
+Probado con tests (migración sobre una tabla vieja simulada, orden FIFO,
+`should_read_greeting`) y a mano al aire con `--saludos-every 1`: el
+locutor leyó un saludo mandado por `POST /greetings` entre dos temas
+reales, y quedó marcado `read_at` en `skywave.db`.
+
 ## Ajustes no anticipados
 
 - **Aire muerto de ~12s por intervención** cuando el guion se genera en

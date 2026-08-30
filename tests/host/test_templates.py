@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from skywave.host.templates import _franja, render_script
+from skywave.host.templates import _franja, render_greeting_script, render_script
 from skywave.library.track import Track
 
 
@@ -67,3 +67,14 @@ def test_deterministico_con_seed() -> None:
 )
 def test_franja_por_hora(hour: int, esperada: str) -> None:
     assert _franja(hour) == esperada
+
+
+def test_render_greeting_script_incluye_el_mensaje() -> None:
+    script = render_greeting_script("Hola desde Rosario!", rng=random.Random(1))
+
+    assert "Hola desde Rosario!" in script
+
+
+def test_render_greeting_script_nunca_vacio() -> None:
+    for seed in range(10):
+        assert render_greeting_script("hola", rng=random.Random(seed))

@@ -1,6 +1,7 @@
 import re
 import sqlite3
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 #: Tabla propia, separada del esquema de `library/db.py`: un saludo es
@@ -12,16 +13,29 @@ CREATE TABLE IF NOT EXISTS greetings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     message TEXT NOT NULL,
     identifier TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    read_at TEXT
 )
 """
 
 
+@dataclass(frozen=True, slots=True)
+class Greeting:
+    id: int
+    message: str
+    identifier: str
+    created_at: datetime
+
+
 def ensure_schema(conn: sqlite3.Connection) -> None:
-    """Crea la tabla `greetings` si no existe. Se llama aparte de
-    `library.db.connect` (que ya crea `tracks`/`now_playing`) para no
-    mezclar los dos esquemas en el mismo módulo."""
+    """Crea la tabla `greetings` si no existe, y migra `read_at` si la
+    tabla ya existía de antes de que este issue la agregara --
+    `CREATE TABLE IF NOT EXISTS` no suma columnas a una tabla que ya
+    existe, así que hace falta este paso aparte."""
     conn.execute(_SCHEMA)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(greetings)")}
+    if "read_at" not in columns:
+        conn.execute("ALTER TABLE greetings ADD COLUMN read_at TEXT")
 
 
 def insert_greeting(
@@ -37,6 +51,36 @@ def insert_greeting(
     conn.execute(
         "INSERT INTO greetings (message, identifier, created_at) VALUES (?, ?, ?)",
         (message, identifier, created_at.isoformat()),
+    )
+
+
+def unread_greetings(conn: sqlite3.Connection) -> list[Greeting]:
+    """Saludos pendientes de leer, del más viejo al más nuevo (FIFO) --
+    el orden en que el locutor los va a leer al aire."""
+    rows = conn.execute(
+        "SELECT id, message, identifier, created_at FROM greetings "
+        "WHERE read_at IS NULL ORDER BY created_at ASC"
+    ).fetchall()
+    return [
+        Greeting(
+            id=row[0],
+            message=row[1],
+            identifier=row[2],
+            created_at=datetime.fromisoformat(row[3]),
+        )
+        for row in rows
+    ]
+
+
+def mark_greeting_read(
+    conn: sqlite3.Connection, greeting_id: int, read_at: datetime | None = None
+) -> None:
+    """No hace commit -- mismo criterio que `insert_greeting`: quien
+    llama decide el alcance de la transacción."""
+    if read_at is None:
+        read_at = datetime.now(UTC)
+    conn.execute(
+        "UPDATE greetings SET read_at = ? WHERE id = ?", (read_at.isoformat(), greeting_id)
     )
 
 

@@ -7,7 +7,9 @@ from skywave.web.greetings import (
     insert_greeting,
     is_appropriate,
     is_within_rate_limit,
+    mark_greeting_read,
     recent_sends,
+    unread_greetings,
 )
 
 
@@ -85,3 +87,44 @@ def test_ensure_schema_es_idempotente(tmp_path: Path) -> None:
     ensure_schema(conn)  # no debe romper si la tabla ya existe
 
     assert recent_sends(conn, "1.2.3.4") == []
+
+
+def test_ensure_schema_migra_read_at_sobre_tabla_vieja(tmp_path: Path) -> None:
+    # Simula una tabla creada antes de este issue, sin la columna read_at
+    # -- exactamente el estado real de skywave.db con saludos de #31.
+    conn = sqlite3.connect(tmp_path / "greetings.db")
+    conn.execute(
+        "CREATE TABLE greetings (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "message TEXT NOT NULL, identifier TEXT NOT NULL, created_at TEXT NOT NULL)"
+    )
+    with conn:
+        insert_greeting(conn, "saludo viejo", identifier="1.2.3.4")
+
+    ensure_schema(conn)  # acá corre la migración
+
+    assert unread_greetings(conn)[0].message == "saludo viejo"
+
+
+def test_unread_greetings_orden_fifo(tmp_path: Path) -> None:
+    conn = _conn(tmp_path)
+    with conn:
+        insert_greeting(
+            conn, "primero", identifier="1.1.1.1", created_at=datetime(2026, 8, 29, 12, 0, 0)
+        )
+        insert_greeting(
+            conn, "segundo", identifier="1.1.1.1", created_at=datetime(2026, 8, 29, 12, 1, 0)
+        )
+
+    assert [g.message for g in unread_greetings(conn)] == ["primero", "segundo"]
+
+
+def test_mark_greeting_read_lo_saca_de_pendientes(tmp_path: Path) -> None:
+    conn = _conn(tmp_path)
+    with conn:
+        insert_greeting(conn, "hola!", identifier="1.2.3.4")
+    greeting_id = unread_greetings(conn)[0].id
+
+    with conn:
+        mark_greeting_read(conn, greeting_id)
+
+    assert unread_greetings(conn) == []

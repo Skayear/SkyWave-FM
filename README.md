@@ -138,6 +138,8 @@ Si cambiás `.env`, correr de nuevo `./scripts/render-icecast-config.sh` y
 | `--sin-locutor` | `play` | Solo música, sin presentaciones |
 | `--sin-publicidades` | `play` | Sin publicidades intercaladas |
 | `--ads-every <N>` | `play` | Cada cuántos temas suena una publicidad (default 8) |
+| `--sin-saludos` | `play` | No leer los saludos que llegan por la web |
+| `--saludos-every <N>` | `play` | Cada cuántos temas se lee un saludo pendiente (default 5) |
 | `--scripts-dir <carpeta>` | `render-ads` | Carpeta con los guiones `.txt` curados (default `assets/ads/scripts`) |
 | `--out-dir <carpeta>` | `render-ads` | Carpeta donde se escriben los WAV (default `assets/ads`) |
 
