@@ -5,11 +5,11 @@ services:
     restart: unless-stopped
     # Puerto 8000 del host ocupado por otro contenedor (portainer), por eso
     # mapeamos a 8010. Icecast adentro del contenedor sigue en su default 8000.
-    # TEMPORAL: expuesto en la LAN para probar desde otra PC de la casa.
-    # La decisión de fondo sigue siendo Tailscale-only (ver CLAUDE.MD);
-    # cuando llegue Fase 8 esto vuelve a "127.0.0.1:8010:8000".
+    # Fase 8 (issue #39): vuelve a atarse a localhost por default -- BIND_HOST
+    # en .env es la IP de la interfaz tailscale0 en el host real, así se
+    # expone solo en la tailnet, nunca en la LAN ni en internet público.
     ports:
-      - "8010:8000"
+      - "${BIND_HOST:-127.0.0.1}:8010:8000"
     # icecast.xml propio (no las ICECAST_* env vars que soporta la imagen):
     # necesitamos subir <source-timeout> por encima de lo que tarda el
     # locutor en generar un guion con Ollama — ver config/icecast.xml.template
@@ -17,3 +17,50 @@ services:
     # correr ese script primero (usa .env).
     volumes:
       - ./config/icecast.xml:/etc/icecast.xml:ro
+
+  skywave:
+    build: .
+    container_name: skywave
+    restart: unless-stopped
+    # docker-entrypoint.sh escala a SIGKILL a los 8s si el cleanup de
+    # skywave play no responde (deadlock conocido entre Decoder/Encoder
+    # si la señal llega a mitad de leer un chunk de audio -- bug real
+    # de mixer/, no de Docker). Este margen le da tiempo a esa escalada
+    # antes de que Docker mate todo por su cuenta con el default (10s).
+    stop_grace_period: 20s
+    depends_on:
+      - icecast
+    env_file:
+      - .env
+    environment:
+      # Dentro de la red de compose, el mixer le habla a Icecast por su
+      # nombre de servicio y su puerto interno -- no el 8010 mapeado al
+      # host. ICECAST_PUBLIC_HOST/PORT (en .env) son lo que arma la URL
+      # que abre el navegador (ver web/app.py get_stream_url).
+      ICECAST_SERVER_HOST: icecast
+      ICECAST_SOURCE_PORT: "8000"
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:8001:8001"
+    volumes:
+      # skywave.db tiene que existir como archivo antes del primer
+      # `docker compose up` (`touch skywave.db`) -- si el path no existe,
+      # Docker crea un directorio ahí en vez de montar un archivo.
+      - ./skywave.db:/app/skywave.db
+      - ./assets/ads:/app/assets/ads
+      - cache:/app/cache
+      - kokoro-cache:/root/.cache/huggingface
+      # Biblioteca musical, solo lectura -- MUSIC_DIR en .env, sin
+      # default: sin esa variable, Compose monta un path vacío y falla
+      # con un error confuso en vez de uno claro.
+      #
+      # Montada en el MISMO path absoluto adentro del contenedor, no en
+      # algo corto como /music: `skywave.db` guarda paths absolutos del
+      # host (`Track.path`, ver library/track.py), y ffmpeg no encuentra
+      # nada si el contenedor los ve en otro lado -- encontrado a mano:
+      # sin esto, cada tema fallaba al toque y el loop pasaba al
+      # siguiente cada 2-5s en vez de sonar en tiempo real.
+      - ${MUSIC_DIR}:${MUSIC_DIR}:ro
+
+volumes:
+  cache:
+  kokoro-cache:

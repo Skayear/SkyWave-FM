@@ -19,6 +19,7 @@ de decisiones en [docs/](docs/).
 - ✅ Fase 5 — Mezcla de verdad (crossfade, ducking, pre-generación del guion)
 - ✅ Fase 6 — Publicidades falsas (guiones curados + jingle + SFX, rotación)
 - ✅ Fase 7 — Web (reproductor, "sonando ahora" en vivo por WebSocket, saludos)
+- ⏳ Fase 8 — Producción (Docker listo y probado; falta activar Tailscale en el host real)
 
 ## Cómo funciona
 
@@ -117,9 +118,38 @@ red: `http://<ip-de-esta-máquina>:8010/sky.mp3`.
 | `ICECAST_ADMIN_USER` / `ICECAST_ADMIN_PASSWORD` | Admin web de Icecast |
 | `ICECAST_SERVER_HOST` | Host de Icecast (default `localhost`) |
 | `ICECAST_SOURCE_PORT` | Puerto en el host (default `8010` — el 8000 estaba ocupado) |
+| `BIND_HOST` | Solo Docker — IP a la que se atan los puertos publicados (default `127.0.0.1`, nada expuesto; en el host real, la IP de `tailscale0`) |
+| `MUSIC_DIR` | Solo Docker — carpeta de música, montada solo lectura. Requerida por `docker-compose.yml` |
+| `ICECAST_PUBLIC_HOST` / `ICECAST_PUBLIC_PORT` | Solo Docker — host/puerto que arma la URL del stream que abre el navegador (distinto del interno `ICECAST_SERVER_HOST`/`ICECAST_SOURCE_PORT`, que dentro de Docker apunta a la red de compose) |
 
 Si cambiás `.env`, correr de nuevo `./scripts/render-icecast-config.sh` y
 `docker compose up -d` (Icecast no relee su config solo).
+
+### Con Docker (Fase 8)
+
+Alternativa a los pasos 2-4 de arriba: un solo `docker compose up`
+levanta Icecast, `skywave play` y la web juntos (`scripts/docker-entrypoint.sh`
+corre los dos últimos como procesos separados dentro del mismo
+contenedor). Necesita `MUSIC_DIR` seteado en `.env` (ver tabla arriba)
+y que `skywave.db` exista como archivo antes del primer `up` --
+`skywave.db` guarda paths absolutos, así que `MUSIC_DIR` tiene que ser
+el mismo path con el que corriste `skywave scan` (se monta en el mismo
+lugar adentro del contenedor, no en `/music`):
+
+```bash
+touch skywave.db                 # si no existe todavía
+docker compose up -d --build
+```
+
+El reproductor web queda en `http://localhost:8001` (o el `BIND_HOST`
+que hayas configurado). Comandos puntuales (`scan`, `exclude`,
+`include`, `render-ads`) siguen corriendo con `uv run skywave ...` en
+el host — como escriben al mismo `skywave.db`/`assets/ads/` que el
+contenedor tiene montados, no hace falta ejecutarlos adentro de
+Docker. Detalle completo, incluyendo dos bugs reales encontrados
+armando esto (paths de música mal montados, y un problema real con
+`Ctrl+C`/SIGINT que también afecta corriendo `skywave play` a mano),
+en [docs/fase-8-produccion.md](docs/fase-8-produccion.md).
 
 ## Comandos
 

@@ -78,12 +78,21 @@ class ArtistsOut(BaseModel):
 
 
 def get_stream_url() -> str:
-    """URL pública del mount de Icecast, con los mismos defaults que
-    `cli._icecast_url` (host/puerto por variables de entorno) -- pero acá
-    sin password: es la URL que escucha un navegador, no la del source
-    que empuja el mixer."""
-    host = os.environ.get("ICECAST_SERVER_HOST", "localhost")
-    port = os.environ.get("ICECAST_SOURCE_PORT", "8010")
+    """URL pública del mount de Icecast -- sin password: es la URL que
+    escucha un navegador, no la del source que empuja el mixer.
+
+    `ICECAST_PUBLIC_HOST`/`ICECAST_PUBLIC_PORT` son opcionales, pensadas
+    para Docker (issue #39): ahí `skywave play` y este server viven en
+    el mismo contenedor y comparten entorno, pero necesitan hablarle a
+    Icecast por caminos distintos -- el mixer empuja por la red interna
+    de compose (`ICECAST_SERVER_HOST=icecast`, puerto del contenedor),
+    mientras que esta URL la abre un navegador de afuera (la IP/puerto
+    público). Sin Docker, ninguna de las dos está seteada y todo cae a
+    `ICECAST_SERVER_HOST`/`ICECAST_SOURCE_PORT` como siempre."""
+    host = os.environ.get("ICECAST_PUBLIC_HOST") or os.environ.get(
+        "ICECAST_SERVER_HOST", "localhost"
+    )
+    port = os.environ.get("ICECAST_PUBLIC_PORT") or os.environ.get("ICECAST_SOURCE_PORT", "8010")
     return f"http://{host}:{port}/sky.mp3"
 
 

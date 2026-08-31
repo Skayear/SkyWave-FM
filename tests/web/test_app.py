@@ -1,11 +1,12 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from skywave.library import db
 from skywave.library.track import Track
-from skywave.web.app import app, get_db_path, get_poll_interval
+from skywave.web.app import app, get_db_path, get_poll_interval, get_stream_url
 
 QUEEN = Track(
     path=Path("/music/Queen - Sheer Heart Attack/01 - Brighton Rock.flac"),
@@ -42,6 +43,40 @@ def _client(db_path: Path, poll_interval: float = 0.05) -> TestClient:
     app.dependency_overrides[get_db_path] = lambda: db_path
     app.dependency_overrides[get_poll_interval] = lambda: poll_interval
     return TestClient(app)
+
+
+def test_get_stream_url_default_es_localhost_8010(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ICECAST_SERVER_HOST", raising=False)
+    monkeypatch.delenv("ICECAST_SOURCE_PORT", raising=False)
+    monkeypatch.delenv("ICECAST_PUBLIC_HOST", raising=False)
+    monkeypatch.delenv("ICECAST_PUBLIC_PORT", raising=False)
+
+    assert get_stream_url() == "http://localhost:8010/sky.mp3"
+
+
+def test_get_stream_url_usa_icecast_server_host_si_no_hay_public(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ICECAST_SERVER_HOST", "icecast")
+    monkeypatch.setenv("ICECAST_SOURCE_PORT", "8000")
+    monkeypatch.delenv("ICECAST_PUBLIC_HOST", raising=False)
+    monkeypatch.delenv("ICECAST_PUBLIC_PORT", raising=False)
+
+    assert get_stream_url() == "http://icecast:8000/sky.mp3"
+
+
+def test_get_stream_url_prefiere_public_sobre_server_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Caso Docker (issue #39): el mixer le habla a Icecast por la red
+    # interna de compose (ICECAST_SERVER_HOST=icecast), pero el
+    # navegador necesita la IP/puerto público.
+    monkeypatch.setenv("ICECAST_SERVER_HOST", "icecast")
+    monkeypatch.setenv("ICECAST_SOURCE_PORT", "8000")
+    monkeypatch.setenv("ICECAST_PUBLIC_HOST", "100.64.1.2")
+    monkeypatch.setenv("ICECAST_PUBLIC_PORT", "8010")
+
+    assert get_stream_url() == "http://100.64.1.2:8010/sky.mp3"
 
 
 def test_index_sirve_html_con_el_reproductor(tmp_path: Path) -> None:

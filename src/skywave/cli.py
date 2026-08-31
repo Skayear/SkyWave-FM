@@ -257,10 +257,15 @@ def play(
     if leer_saludos:
         with conn:
             web_greetings.ensure_schema(conn)
-    # Plan de una corrida anterior (crash, o un --no-repeat-artist
-    # distinto): mejor arrancar con la cola vacía que arrastrar un plan
-    # que ya no corresponde -- mismo criterio que now_playing.
+    # Estado de una corrida anterior que no cerró limpio (crash, un
+    # `docker stop` que escaló a SIGKILL porque el cleanup del `finally`
+    # no llegó a correr -- ver docker-entrypoint.sh) puede dejar
+    # `now_playing` mintiendo un tema viejo y `upcoming_queue` con un
+    # plan que ya no corresponde (por ejemplo si cambió
+    # --no-repeat-artist). Mejor arrancar en blanco que arrastrar
+    # cualquiera de los dos.
     with conn:
+        db.clear_now_playing(conn)
         db.clear_upcoming_queue(conn)
     icecast_url = _icecast_url(mount)
     console.print(
