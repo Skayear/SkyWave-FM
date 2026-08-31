@@ -165,7 +165,11 @@ se reconecta solo si se corta), una playlist "a continuación" (`GET
 `--no-repeat-artist` también aplica a la cola, ver arriba), y un
 textbox para mandar un saludo (`POST /greetings`, con moderación de
 palabras prohibidas y rate limit por IP — el locutor los lee al aire
-cada N temas, ver `--saludos-every` arriba).
+cada N temas, ver `--saludos-every` arriba), y un checkbox por artista
+para excluirlo de la rotación (`GET /artists`, `POST
+/exclude-artist`/`include-artist` — espejo web de `skywave
+exclude`/`include`; los cambios se aplican recién en el próximo
+arranque de `skywave play`).
 `GET /now-playing` sigue disponible como endpoint JSON simple (devuelve
 `null` si la radio está apagada).
 

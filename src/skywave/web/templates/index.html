@@ -76,6 +76,48 @@
     }
     #saludo-form button:disabled { opacity: 0.5; cursor: default; }
     #saludo-estado { font-size: 0.9rem; min-height: 1.2rem; }
+    #excluidos {
+      width: 100%;
+      max-width: 420px;
+    }
+    #excluidos h2 {
+      font-size: 0.9rem;
+      color: #999;
+      font-weight: normal;
+      margin: 0 0 0.4rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      text-align: center;
+    }
+    #excluidos p.ayuda {
+      font-size: 0.75rem;
+      color: #777;
+      text-align: center;
+      margin: 0 0 0.6rem;
+    }
+    #excluidos-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      font-size: 0.9rem;
+      max-height: 260px;
+      overflow-y: auto;
+      border: 1px solid #333;
+      border-radius: 4px;
+    }
+    #excluidos-list li {
+      padding: 0.35rem 0.6rem;
+      color: #ccc;
+      border-bottom: 1px solid #222;
+    }
+    #excluidos-list li:last-child { border-bottom: none; }
+    #excluidos-list label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+    }
+    #excluidos-estado { font-size: 0.9rem; min-height: 1.2rem; text-align: center; }
   </style>
 </head>
 <body>
@@ -102,6 +144,16 @@
     <button type="submit">Mandar saludo</button>
     <div id="saludo-estado"></div>
   </form>
+
+  <div id="excluidos">
+    <h2>Artistas</h2>
+    <p class="ayuda">
+      Destildá un artista para sacarlo de la rotación. Los cambios se
+      aplican la próxima vez que arranca <code>skywave play</code>.
+    </p>
+    <ul id="excluidos-list"></ul>
+    <div id="excluidos-estado"></div>
+  </div>
 
   <script>
     // textContent, no innerHTML: título/artista vienen de tags de audio
@@ -197,6 +249,57 @@
         saludoBoton.disabled = false;
       }
     });
+
+    // Excluir/incluir artistas (issue #41): un checkbox por artista,
+    // tildado = suena en la rotación. Nada de textbox de nombre libre
+    // -- los nombres salen de GET /artists (la biblioteca real), así
+    // que no hace falta validar que coincidan con nada.
+    const excluidosList = document.getElementById("excluidos-list");
+    const excluidosEstado = document.getElementById("excluidos-estado");
+
+    async function actualizarArtistas() {
+      try {
+        const resp = await fetch("/artists");
+        const data = await resp.json();
+        excluidosList.replaceChildren(
+          ...data.artists.map(({ name, excluded }) => {
+            const li = document.createElement("li");
+            const label = document.createElement("label");
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = !excluded;
+            checkbox.addEventListener("change", () => alternarArtista(name, checkbox.checked));
+            const nombre = document.createElement("span");
+            nombre.textContent = name;
+            label.append(checkbox, nombre);
+            li.appendChild(label);
+            return li;
+          })
+        );
+      } catch {
+        excluidosEstado.textContent = "No se pudo cargar la lista de artistas.";
+      }
+    }
+
+    async function alternarArtista(artist, incluir) {
+      const endpoint = incluir ? "/include-artist" : "/exclude-artist";
+      try {
+        const resp = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ artist }),
+        });
+        excluidosEstado.textContent = resp.ok
+          ? incluir
+            ? `${artist} vuelve a sonar.`
+            : `${artist} excluido.`
+          : "No se pudo guardar el cambio.";
+      } catch {
+        excluidosEstado.textContent = "No se pudo guardar el cambio.";
+      }
+    }
+
+    actualizarArtistas();
   </script>
 </body>
 </html>

@@ -100,6 +100,10 @@ biblioteca real: excluir "Mägo de Oz" bajó el catálogo de `skywave
 play` de 1341 a 1080 temas (exactamente los 261 tracks del artista),
 sin sacarlos de `skywave list`; ninguno apareció en `/queue`.
 
+Mismo día, Pablo pidió el espejo en la web: checkboxes en vez de
+CLI a mano. Ver docs/fase-7-web.md, sección 7 -- de paso salió un bug
+real del WebSocket de Fase 7 (#32), no relacionado con esto.
+
 ## Ajustes no anticipados
 
 - **El fallback de Fase 1 confunde álbum con artista en carpetas

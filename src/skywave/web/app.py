@@ -1,9 +1,10 @@
 import asyncio
+import contextlib
 import os
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator
@@ -52,6 +53,27 @@ class GreetingIn(BaseModel):
         if not stripped:
             raise ValueError("el mensaje no puede estar vacío")
         return stripped
+
+
+class ArtistIn(BaseModel):
+    artist: str = Field(min_length=1, max_length=200)
+
+    @field_validator("artist")
+    @classmethod
+    def _no_solo_espacios(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("el artista no puede estar vacío")
+        return stripped
+
+
+class ArtistStatusOut(BaseModel):
+    name: str
+    excluded: bool
+
+
+class ArtistsOut(BaseModel):
+    artists: list[ArtistStatusOut]
 
 
 def get_stream_url() -> str:
@@ -149,12 +171,72 @@ def post_greeting(
     return {"status": "ok"}
 
 
+@app.get("/artists")
+def get_artists(db_path: Path = Depends(get_db_path)) -> ArtistsOut:
+    """Todos los artistas de la biblioteca, marcando cuáles están
+    excluidos de la rotación (issue #41) -- la web arma un checkbox por
+    artista con esto, en vez de un textbox de nombre libre que puede
+    tener un typo y no coincidir con nada."""
+    conn = db.connect(db_path)
+    excluded = db.excluded_artists(conn)
+    return ArtistsOut(
+        artists=[
+            ArtistStatusOut(name=artist, excluded=artist in excluded)
+            for artist in db.list_artists(conn)
+        ]
+    )
+
+
+@app.post("/exclude-artist", status_code=201)
+def post_exclude_artist(body: ArtistIn, db_path: Path = Depends(get_db_path)) -> dict[str, str]:
+    """Espejo web de `skywave exclude`: no toca la biblioteca, `skywave
+    play` recién lo ve en su próximo arranque (el catálogo se carga una
+    sola vez al inicio, no en vivo)."""
+    conn = db.connect(db_path)
+    with conn:
+        db.exclude_artist(conn, body.artist)
+    return {"status": "ok"}
+
+
+@app.post("/include-artist")
+def post_include_artist(body: ArtistIn, db_path: Path = Depends(get_db_path)) -> dict[str, str]:
+    """Espejo web de `skywave include`."""
+    conn = db.connect(db_path)
+    with conn:
+        db.include_artist(conn, body.artist)
+    return {"status": "ok"}
+
+
 @app.get("/now-playing")
 def now_playing(db_path: Path = Depends(get_db_path)) -> NowPlayingOut | None:
     """Qué está sonando ahora mismo, o `null` si la radio está apagada (o
     la biblioteca todavía está vacía) -- nunca un 500 por no tener nada
     que mostrar, mismo principio del resto del proyecto."""
     return _now_playing_payload(db_path)
+
+
+async def _push_now_playing(websocket: WebSocket, db_path: Path, poll_interval: float) -> None:
+    last_sent: NowPlayingOut | None | object = object()  # nunca == al primer payload real
+    while True:
+        payload = _now_playing_payload(db_path)
+        if payload != last_sent:
+            await websocket.send_json(payload.model_dump(mode="json") if payload else None)
+            last_sent = payload
+        await asyncio.sleep(poll_interval)
+
+
+async def _wait_for_disconnect(websocket: WebSocket) -> None:
+    # Este endpoint solo empuja datos, no le importa lo que mande el
+    # cliente -- pero *tiene* que llamar a receive() igual: es la única
+    # forma de que Starlette entregue el mensaje "websocket.disconnect"
+    # (cliente cerró la pestaña, o el propio server lo cierra en un
+    # shutdown). Sin esto, _push_now_playing nunca se entera y el
+    # server queda esperando esta conexión para siempre en cada
+    # `--reload` o Ctrl+C -- encontrado a mano: el reload se quedaba
+    # colgado en "Waiting for background tasks to complete" con
+    # cualquier pestaña abierta.
+    while True:
+        await websocket.receive_text()
 
 
 @app.websocket("/ws")
@@ -165,17 +247,24 @@ async def now_playing_ws(
 ) -> None:
     """Empuja el "sonando ahora" apenas cambia, para que la página no
     tenga que hacer polling HTTP por su cuenta. SQLite no tiene pub/sub
-    nativo -- este loop hace el polling del lado del servidor sobre
+    nativo -- un loop hace el polling del lado del servidor sobre
     `now_playing`, un solo lugar leyendo la base cada `poll_interval`
-    en vez de una consulta HTTP por cada pestaña abierta."""
+    en vez de una consulta HTTP por cada pestaña abierta.
+
+    Corre ese loop junto a otro que solo escucha la desconexión
+    (`_wait_for_disconnect`): el primero que termina cancela al otro."""
     await websocket.accept()
-    last_sent: NowPlayingOut | None | object = object()  # nunca == al primer payload real
-    try:
-        while True:
-            payload = _now_playing_payload(db_path)
-            if payload != last_sent:
-                await websocket.send_json(payload.model_dump(mode="json") if payload else None)
-                last_sent = payload
-            await asyncio.sleep(poll_interval)
-    except WebSocketDisconnect:
-        pass
+    push_task = asyncio.create_task(_push_now_playing(websocket, db_path, poll_interval))
+    disconnect_task = asyncio.create_task(_wait_for_disconnect(websocket))
+    done, pending = await asyncio.wait(
+        {push_task, disconnect_task}, return_when=asyncio.FIRST_COMPLETED
+    )
+    for task in pending:
+        task.cancel()
+    # asyncio.wait no propaga la excepción del que terminó primero (p.ej.
+    # WebSocketDisconnect) -- hay que recuperarla acá, aunque no haga
+    # falta hacer nada con ella, o queda un "exception never retrieved"
+    # cuando el garbage collector se lleve la Task.
+    for task in done | pending:
+        with contextlib.suppress(Exception, asyncio.CancelledError):
+            await task

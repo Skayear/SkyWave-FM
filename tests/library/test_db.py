@@ -49,6 +49,22 @@ def test_upsert_then_list_roundtrips_the_track(tmp_path: Path) -> None:
     assert db.list_tracks(conn) == [track]
 
 
+def test_list_artists_devuelve_nombres_distintos_ordenados(tmp_path: Path) -> None:
+    conn = db.connect(tmp_path / "library.db")
+    with conn:
+        db.upsert_track(conn, _track(path=Path("/a/1.mp3"), artist="Queen"))
+        db.upsert_track(conn, _track(path=Path("/a/2.mp3"), artist="Queen"))
+        db.upsert_track(conn, _track(path=Path("/a/3.mp3"), artist="ABBA"))
+
+    assert db.list_artists(conn) == ["ABBA", "Queen"]
+
+
+def test_list_artists_biblioteca_vacia(tmp_path: Path) -> None:
+    conn = db.connect(tmp_path / "library.db")
+
+    assert db.list_artists(conn) == []
+
+
 def test_upsert_same_path_updates_instead_of_duplicating(tmp_path: Path) -> None:
     conn = db.connect(tmp_path / "library.db")
     path = Path("/music/a/01 - x.mp3")

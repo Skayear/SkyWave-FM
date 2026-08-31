@@ -214,6 +214,42 @@ Probado con tests (`plan_queue()` puro, CRUD de `upcoming_queue`,
 es exactamente el próximo tema, y que la cola se corre (no se
 recalcula entera) cuando cambia.
 
+### 7. Excluir artistas desde la web (issue [#41](https://github.com/Skayear/SkyWave-FM/issues/41))
+
+Espejo web de `skywave exclude`/`skywave include` (ver
+docs/fase-3-programacion.md para el CLI). `library/db.py` suma
+`list_artists()` (nombres distintos de `tracks`, ordenados). `GET
+/artists` combina eso con `excluded_artists()` y devuelve cada artista
+con su estado (`{name, excluded}`); `POST /exclude-artist` / `POST
+/include-artist` alternan ese estado.
+
+Primera versión tenía un textbox de nombre libre -- Pablo lo cambió por
+un checkbox por artista (los 48 nombres salen de `GET /artists`, la
+biblioteca real): así se ahorra la validación de que el texto escrito
+coincida exactamente con un artista real, y no hace falta acordarse de
+cómo está tipeado.
+
+**Bug real encontrado a mano, no relacionado con #41 pero descubierto
+mientras se probaba:** con cualquier pestaña del navegador abierta
+(conexión WebSocket viva), `uvicorn --reload` quedaba colgado para
+siempre en "Waiting for background tasks to complete" al guardar un
+archivo. `GET /ws` (issue #32) nunca llamaba a `websocket.receive()`
+-- sin eso, ni el propio handler se entera cuando el cliente
+desconecta, ni Starlette tiene forma de entregarle el cierre que
+dispara el servidor en un shutdown. Se corrigió corriendo dos tareas en
+paralelo con `asyncio.wait(..., return_when=FIRST_COMPLETED)`: una que
+empuja actualizaciones (la de siempre) y otra que solo espera
+`receive()` para detectar la desconexión; la que termina primero
+cancela a la otra. Confirmado a mano: con una conexión WS abierta de
+verdad (cliente en Python con la librería `websockets`), un `--reload`
+completó limpio en vez de colgarse, y el navegador se reconectó solo
+después (el `setTimeout` de reconexión del #32 ya lo contemplaba).
+
+Probado con tests (`GET /artists` vacío/con biblioteca/marcando
+excluidos, los tests de WebSocket existentes siguen pasando con la
+nueva estructura de dos tareas) y a mano: excluir/incluir por API,
+y el reload sin colgarse con una conexión WS real abierta.
+
 ## Ajustes no anticipados
 
 - Los issues #30, #31, #32, #36 y #38 aparecieron cerrados en GitHub
