@@ -34,6 +34,30 @@
       margin: 0 0 0.4rem;
       text-transform: uppercase;
       letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+    }
+    #queue-refresh {
+      background: none;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #999;
+      font-size: 0.85rem;
+      line-height: 1;
+      padding: 0.15rem 0.4rem;
+      cursor: pointer;
+    }
+    #queue-refresh:hover { color: #eee; border-color: #666; }
+    #queue-refresh:disabled { opacity: 0.6; cursor: default; }
+    #queue-refresh.girando { animation: girar 0.6s linear; }
+    @keyframes girar { to { transform: rotate(360deg); } }
+    #queue-estado {
+      font-size: 0.75rem;
+      color: #777;
+      text-align: center;
+      min-height: 1rem;
     }
     #queue-list {
       list-style: none;
@@ -129,8 +153,9 @@
   </div>
 
   <div id="queue">
-    <h2>A continuación</h2>
+    <h2>A continuación <button id="queue-refresh" type="button" title="Actualizar">↻</button></h2>
     <ul id="queue-list"></ul>
+    <div id="queue-estado"></div>
   </div>
 
   <form id="saludo-form">
@@ -148,9 +173,10 @@
   <div id="excluidos">
     <h2>Artistas</h2>
     <p class="ayuda">
-      Destildá un artista para sacarlo de la rotación. Los cambios se
-      aplican la próxima vez que arranca <code>skywave play</code>.
+      Destildá un artista para sacarlo de la rotación. Se nota en el
+      próximo tema, sin reiniciar <code>skywave play</code>.
     </p>
+    <p class="ayuda" id="excluidos-resumen"></p>
     <ul id="excluidos-list"></ul>
     <div id="excluidos-estado"></div>
   </div>
@@ -176,6 +202,8 @@
     // creados con textContent, no innerHTML: título/artista vienen de
     // tags de audio, no son HTML de confianza.
     const queueList = document.getElementById("queue-list");
+    const queueEstado = document.getElementById("queue-estado");
+    const queueRefreshBtn = document.getElementById("queue-refresh");
 
     async function actualizarCola() {
       try {
@@ -197,6 +225,23 @@
     }
 
     actualizarCola();
+
+    // El botón llama a lo mismo que ya se actualiza solo por WS, pero
+    // sin feedback visual la cola muchas veces no cambia entre clicks y
+    // parece que no hizo nada -- por eso el ícono gira y queda un
+    // mensajito breve, aunque el contenido termine siendo igual.
+    queueRefreshBtn.addEventListener("click", async () => {
+      queueRefreshBtn.disabled = true;
+      queueRefreshBtn.classList.add("girando");
+      queueEstado.textContent = "Actualizando...";
+      await actualizarCola();
+      queueEstado.textContent = "Actualizado.";
+      setTimeout(() => {
+        queueRefreshBtn.classList.remove("girando");
+        queueRefreshBtn.disabled = false;
+        queueEstado.textContent = "";
+      }, 900);
+    });
 
     // GET /ws empuja el "sonando ahora" apenas cambia -- nada de
     // polling HTTP desde acá. Si el socket se cae (proxy que corta
@@ -256,13 +301,21 @@
     // que no hace falta validar que coincidan con nada.
     const excluidosList = document.getElementById("excluidos-list");
     const excluidosEstado = document.getElementById("excluidos-estado");
+    const excluidosResumen = document.getElementById("excluidos-resumen");
 
     async function actualizarArtistas() {
       try {
         const resp = await fetch("/artists");
         const data = await resp.json();
+        const totalTemas = data.artists.reduce((suma, a) => suma + a.track_count, 0);
+        const totalIncluidos = data.artists
+          .filter((a) => !a.excluded)
+          .reduce((suma, a) => suma + a.track_count, 0);
+        excluidosResumen.textContent =
+          `${data.artists.length} artistas, ${totalTemas} temas en total ` +
+          `-- ${totalIncluidos} suenan ahora.`;
         excluidosList.replaceChildren(
-          ...data.artists.map(({ name, excluded }) => {
+          ...data.artists.map(({ name, excluded, track_count }) => {
             const li = document.createElement("li");
             const label = document.createElement("label");
             const checkbox = document.createElement("input");
@@ -270,7 +323,7 @@
             checkbox.checked = !excluded;
             checkbox.addEventListener("change", () => alternarArtista(name, checkbox.checked));
             const nombre = document.createElement("span");
-            nombre.textContent = name;
+            nombre.textContent = `${name} (${track_count})`;
             label.append(checkbox, nombre);
             li.appendChild(label);
             return li;
@@ -294,6 +347,7 @@
             ? `${artist} vuelve a sonar.`
             : `${artist} excluido.`
           : "No se pudo guardar el cambio.";
+        if (resp.ok) actualizarArtistas(); // refresca el resumen de temas
       } catch {
         excluidosEstado.textContent = "No se pudo guardar el cambio.";
       }

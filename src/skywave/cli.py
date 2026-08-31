@@ -1,4 +1,5 @@
 import os
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
@@ -229,18 +230,19 @@ def play(
         )
         raise typer.Exit()
 
-    # Exclusión de artistas (issue #41): no toca la biblioteca, solo el
-    # catálogo que ve pick_next/plan_queue -- skywave list los sigue
-    # mostrando.
-    excluded = db.excluded_artists(conn)
-    if excluded:
-        catalog = [track for track in catalog if track.artist not in excluded]
-        if not catalog:
-            console.print(
-                "Todos los artistas de la biblioteca están excluidos "
-                "([bold]skywave include <artista>[/bold] para sacar alguno)."
-            )
-            raise typer.Exit()
+    def _effective_catalog(exclusion_conn: sqlite3.Connection) -> list[Track]:
+        """Catálogo real disponible para `pick_next`/`plan_queue`,
+        filtrando artistas excluidos (issue #41). Se recalcula en cada
+        llamada (no una vez al arrancar) para que excluir/incluir por
+        CLI o por la web se note sin reiniciar `skywave play`. Si
+        excluir dejaría el pool vacío, se ignora la exclusión -- mismo
+        principio que el resto del scheduler: la radio nunca se queda
+        muda por una regla, ni siquiera esta."""
+        excluded = db.excluded_artists(exclusion_conn)
+        if not excluded:
+            return catalog
+        filtered = [track for track in catalog if track.artist not in excluded]
+        return filtered or catalog
 
     host = _build_locutor() if locutor else None
     # Publicidades pre-renderizadas (issue #25/#26): si no hay ninguna
@@ -261,7 +263,10 @@ def play(
     with conn:
         db.clear_upcoming_queue(conn)
     icecast_url = _icecast_url(mount)
-    console.print(f"Al aire con {len(catalog)} tracks -> [bold]{mount}[/bold] (Ctrl+C para cortar)")
+    console.print(
+        f"Al aire con {len(_effective_catalog(conn))} tracks "
+        f"-> [bold]{mount}[/bold] (Ctrl+C para cortar)"
+    )
     history: list[Track] = []
 
     def _prepare_next(previous_track: Track | None) -> _Prepared:
@@ -289,7 +294,7 @@ def play(
         with queue_conn:
             already_queued = db.peek_queue(queue_conn, limit=QUEUE_DEPTH)
             nuevos = plan_queue(
-                catalog,
+                _effective_catalog(queue_conn),
                 history,
                 already_queued,
                 target_depth=QUEUE_DEPTH,

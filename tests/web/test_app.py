@@ -191,8 +191,8 @@ def test_artists_lista_todos_sin_excluir_por_default(tmp_path: Path) -> None:
     assert response.status_code == 200
     assert response.json() == {
         "artists": [
-            {"name": "David Bowie", "excluded": False},
-            {"name": "Queen", "excluded": False},
+            {"name": "David Bowie", "excluded": False, "track_count": 1},
+            {"name": "Queen", "excluded": False, "track_count": 1},
         ]
     }
 
@@ -207,7 +207,9 @@ def test_exclude_artist_lo_marca_excluido_en_artists(tmp_path: Path) -> None:
     response = client.post("/exclude-artist", json={"artist": "Queen"})
 
     assert response.status_code == 201
-    assert client.get("/artists").json() == {"artists": [{"name": "Queen", "excluded": True}]}
+    assert client.get("/artists").json() == {
+        "artists": [{"name": "Queen", "excluded": True, "track_count": 1}]
+    }
 
 
 def test_exclude_artist_vacio_es_422(tmp_path: Path) -> None:
@@ -227,7 +229,9 @@ def test_include_artist_lo_desmarca_en_artists(tmp_path: Path) -> None:
     response = client.post("/include-artist", json={"artist": "Queen"})
 
     assert response.status_code == 200
-    assert client.get("/artists").json() == {"artists": [{"name": "Queen", "excluded": False}]}
+    assert client.get("/artists").json() == {
+        "artists": [{"name": "Queen", "excluded": False, "track_count": 1}]
+    }
 
 
 def test_ws_primer_mensaje_es_null_si_no_suena_nada(tmp_path: Path) -> None:

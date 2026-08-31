@@ -108,12 +108,21 @@ def list_tracks(conn: sqlite3.Connection) -> list[Track]:
     return [_track_from_row(row) for row in rows]
 
 
-def list_artists(conn: sqlite3.Connection) -> list[str]:
-    """Nombres de artista distintos en la biblioteca, ordenados -- para
-    que la web arme checkboxes en `GET /artists` (issue #41) en vez de
-    un textbox de nombre libre."""
-    rows = conn.execute("SELECT DISTINCT artist FROM tracks ORDER BY artist").fetchall()
-    return [row["artist"] for row in rows]
+@dataclass(frozen=True, slots=True)
+class ArtistCount:
+    name: str
+    track_count: int
+
+
+def list_artists(conn: sqlite3.Connection) -> list[ArtistCount]:
+    """Artistas distintos en la biblioteca con su cantidad de temas,
+    ordenados por nombre -- para que la web arme checkboxes en `GET
+    /artists` (issue #41), con el conteo, en vez de un textbox de
+    nombre libre."""
+    rows = conn.execute(
+        "SELECT artist, COUNT(*) AS n FROM tracks GROUP BY artist ORDER BY artist"
+    ).fetchall()
+    return [ArtistCount(name=row["artist"], track_count=row["n"]) for row in rows]
 
 
 def set_now_playing(

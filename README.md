@@ -162,14 +162,16 @@ uv run uvicorn skywave.web.app:app --reload
 mount de Icecast), el tema sonando en vivo por WebSocket (`GET /ws`,
 se reconecta solo si se corta), una playlist "a continuación" (`GET
 /queue`, cola real que `skywave play` planifica por adelantado —
-`--no-repeat-artist` también aplica a la cola, ver arriba), y un
+`--no-repeat-artist` también aplica a la cola, ver arriba — con botón
+de refresh manual además de actualizarse sola por WebSocket), un
 textbox para mandar un saludo (`POST /greetings`, con moderación de
 palabras prohibidas y rate limit por IP — el locutor los lee al aire
 cada N temas, ver `--saludos-every` arriba), y un checkbox por artista
 para excluirlo de la rotación (`GET /artists`, `POST
 /exclude-artist`/`include-artist` — espejo web de `skywave
-exclude`/`include`; los cambios se aplican recién en el próximo
-arranque de `skywave play`).
+exclude`/`include`). Los cambios de exclusión son **en vivo**: se
+notan sin reiniciar `skywave play` (excepto la primera vez después de
+actualizar el código, porque Python no recarga módulos solo).
 `GET /now-playing` sigue disponible como endpoint JSON simple (devuelve
 `null` si la radio está apagada).
 

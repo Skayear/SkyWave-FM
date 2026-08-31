@@ -250,6 +250,40 @@ excluidos, los tests de WebSocket existentes siguen pasando con la
 nueva estructura de dos tareas) y a mano: excluir/incluir por API,
 y el reload sin colgarse con una conexión WS real abierta.
 
+**Exclusión en vivo, sin reiniciar `skywave play` (mismo día).** Pablo
+preguntó si hacía falta reiniciar la radio para que se note un cambio
+en la lista de excluidos -- sí, porque `catalog` se filtraba una sola
+vez al arrancar `play()`. Se resolvió con `_effective_catalog(conn)`
+en `cli.py`: en vez de filtrar el catálogo una vez, esta función se
+llama de nuevo en cada `_prepare_next()` (una vez por tema) y relee
+`db.excluded_artists()` en ese momento. Si excluir todo dejaría el
+pool vacío, se ignora la exclusión en vez de dejar la radio muda --
+mismo principio que el resto del scheduler (`_hourly_pool`, la
+relajación de ventana de artista).
+
+Nota para probarlo a mano: ya encolado un tema no se saca
+retroactivamente si su artista se excluye después -- solo los
+próximos huecos de la cola respetan el cambio nuevo. Con la cola llena
+(5 lugares) esto puede tardar varios temas reales en notarse.
+
+**Primer intento de prueba fallido, por una razón obvia en
+retrospectiva:** el `skywave play` que estaba corriendo había
+arrancado *antes* de escribir este fix -- Python no recarga código en
+caliente como `uvicorn --reload`, así que ese proceso siguió con la
+lógica vieja en memoria pase lo que pase en la base. Hubo que
+reiniciarlo una vez para que cargara el código nuevo; recién ahí,
+excluir/incluir un artista sin un *segundo* reinicio se notó de
+verdad -- confirmado a mano reincluyendo "Queen" con la radio
+sonando: apareció en la cola y arrancó a sonar sin cortar nada.
+
+**Botón de refresh en "A continuación", y su propio ajuste chico.**
+Pablo pidió un botón para forzar `GET /queue` sin esperar al
+WebSocket. La primera versión no daba ningún feedback -- como la cola
+casi nunca cambia entre dos clicks seguidos, parecía que el botón no
+hacía nada. Se agregó una animación de giro en el ícono y un mensaje
+breve ("Actualizando..." → "Actualizado.") mientras se resuelve el
+fetch, aunque el contenido final sea idéntico al de antes.
+
 ## Ajustes no anticipados
 
 - Los issues #30, #31, #32, #36 y #38 aparecieron cerrados en GitHub

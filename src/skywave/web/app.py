@@ -70,6 +70,7 @@ class ArtistIn(BaseModel):
 class ArtistStatusOut(BaseModel):
     name: str
     excluded: bool
+    track_count: int
 
 
 class ArtistsOut(BaseModel):
@@ -181,7 +182,9 @@ def get_artists(db_path: Path = Depends(get_db_path)) -> ArtistsOut:
     excluded = db.excluded_artists(conn)
     return ArtistsOut(
         artists=[
-            ArtistStatusOut(name=artist, excluded=artist in excluded)
+            ArtistStatusOut(
+                name=artist.name, excluded=artist.name in excluded, track_count=artist.track_count
+            )
             for artist in db.list_artists(conn)
         ]
     )
