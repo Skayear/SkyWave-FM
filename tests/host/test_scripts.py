@@ -2,7 +2,10 @@ import random
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from skywave.host.scripts import (
+    ClaudeGenerator,
     ResilientScriptWriter,
     TemplateGenerator,
     _base_title,
@@ -36,6 +39,35 @@ RIDIN = Track(
     year=None,
     duration_seconds=260.0,
 )
+
+
+class _RespuestaClaudeFalsa:
+    """Imita la forma mínima de una respuesta de `client.messages.create`
+    (`response.content[0].text`) sin depender del SDK real."""
+
+    def __init__(self, text: str) -> None:
+        self.content = [type("Bloque", (), {"text": text})()]
+
+
+class _MessagesFalso:
+    def __init__(self, text: str | None, error: Exception | None) -> None:
+        self._text = text
+        self._error = error
+
+    def create(self, **kwargs: object) -> _RespuestaClaudeFalsa:
+        if self._error is not None:
+            raise self._error
+        assert self._text is not None
+        return _RespuestaClaudeFalsa(self._text)
+
+
+class ClienteClaudeFalso:
+    """Doble del cliente `anthropic.Anthropic`: nunca pega a la API real,
+    solo expone `.messages.create(...)` con la respuesta o el error que
+    se le pida de antemano."""
+
+    def __init__(self, text: str | None = None, error: Exception | None = None) -> None:
+        self.messages = _MessagesFalso(text, error)
 
 
 class GeneradorRoto:
@@ -133,3 +165,34 @@ def test_template_generator_cumple_la_interfaz() -> None:
     script = generator.generate(QUEEN, QUEEN, TARDE)
 
     assert isinstance(script, str) and script
+
+
+def test_claude_generator_cumple_la_interfaz() -> None:
+    generator = ClaudeGenerator(
+        client=ClienteClaudeFalso(text="Ahora suena Brighton Rock de Queen.")
+    )
+
+    assert generator.generate(None, QUEEN, TARDE) == "Ahora suena Brighton Rock de Queen."
+
+
+def test_claude_generator_detecta_un_tema_inventado() -> None:
+    generator = ClaudeGenerator(
+        client=ClienteClaudeFalso(text="Ahora un clásico: El Amante de Juan Luis Guerra")
+    )
+
+    with pytest.raises(ValueError):
+        generator.generate(None, QUEEN, TARDE)
+
+
+def test_claude_generator_detecta_respuesta_vacia() -> None:
+    generator = ClaudeGenerator(client=ClienteClaudeFalso(text="   "))
+
+    with pytest.raises(ValueError):
+        generator.generate(None, QUEEN, TARDE)
+
+
+def test_claude_generator_propaga_errores_de_red() -> None:
+    generator = ClaudeGenerator(client=ClienteClaudeFalso(error=ConnectionError("sin red")))
+
+    with pytest.raises(ConnectionError):
+        generator.generate(None, QUEEN, TARDE)

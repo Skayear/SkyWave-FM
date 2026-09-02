@@ -68,8 +68,8 @@ Medido: ~1.2s la primera síntesis, ~0.1ms el hit de cache.
 - **`ScriptGenerator` es un `Protocol`** — duck typing tipado: cualquier
   clase con la firma de `generate()` califica, sin heredar de nada. Es lo
   que permite intercambiar Ollama / API de Claude / plantillas sin tocar
-  el resto (la implementación con API de Claude queda pendiente; la
-  interfaz ya la contempla).
+  el resto -- la implementación con API de Claude llegó después, ver
+  "Seguimiento posterior a la fase" más abajo (issue #34).
 - **`OllamaGenerator`** contra la API HTTP local (`urllib` de la stdlib —
   una sola llamada POST no justifica una dependencia). Modelo:
   `llama3.2:3b`.
@@ -209,6 +209,56 @@ reales, y quedó marcado `read_at` en `skywave.db`.
   `_mentions_track`). Si el guion es muy largo para el límite del modelo
   (510 caracteres de fonemas), cae a la síntesis normal en vez de perder
   la intervención entera.
+
+## Seguimiento posterior a la fase
+
+### Generador de guiones con la API de Claude (issue [#34](https://github.com/Skayear/SkyWave-FM/issues/34))
+
+`ScriptGenerator` (`Protocol`) ya dejaba la puerta abierta a un segundo
+generador además de `OllamaGenerator`. `ClaudeGenerator`
+(`src/skywave/host/scripts.py`) la implementa contra la Messages API del
+SDK oficial `anthropic`, reusando `_prompt()` y `_mentions_track()` tal
+cual -- no son específicas de Ollama, así que no hacía falta duplicarlas.
+Mismo criterio de fallas: cualquier problema (red, respuesta vacía, tema
+inventado) sale como excepción, y quien decide qué hacer con eso sigue
+siendo `ResilientScriptWriter`, no esta clase.
+
+Modelo default: `claude-haiku-4-5-20251001` — el más barato/rápido de la
+familia, de sobra para una frase de locutor entre temas.
+
+**El SDK `anthropic` quedó como dependencia opcional**
+(`pyproject.toml`, `[project.optional-dependencies]`, extra `claude`,
+`uv sync --extra claude`), no como dependencia dura de todo el proyecto:
+la mayoría de las corridas usan Ollama (gratis, local) y no tiene sentido
+forzar el paquete a quien nunca usa `--generador claude`. Por la misma
+razón el `import anthropic` no va arriba del módulo `scripts.py`, sino
+adentro de `ClaudeGenerator.__init__` -- recién cuando alguien de verdad
+instancia esta clase, así el resto de `skywave` importa igual sin el
+extra instalado.
+
+**Elección de generador**: `skywave play --generador ollama|claude`
+(default `ollama`). Sin `ANTHROPIC_API_KEY` en el entorno y pidiendo
+`--generador claude`, `_build_locutor()` avisa y arranca directo con
+plantillas -- ni siquiera intenta instanciar `ClaudeGenerator` una vez.
+Con la key puesta, si falla en vivo cae a plantillas igual que con
+Ollama (mismo `ResilientScriptWriter`). Esto obligó a mover el
+`load_dotenv()` que antes solo corría en `_icecast_url()` (más abajo en
+el flujo de `play()`) a `_build_locutor()`, para que la key ya esté en
+`os.environ` cuando se hace ese chequeo.
+
+Probado con tests (`tests/host/test_scripts.py`): cliente de Anthropic
+falso (nunca pega a la API real), guion normal, tema inventado,
+respuesta vacía y error de red.
+
+**Nota sobre el issue**: un comentario anterior de otra sesión afirmaba
+que esto ya estaba implementado en un commit (`e7f37b5`) que en realidad
+no existe en el repo -- ni en `git log`, ni en el reflog, ni como commit
+huérfano. No hay forma de saber qué pasó (¿otro clon del repo?, ¿se
+perdió al re-clonar?), pero acá no había nada de `ClaudeGenerator` para
+retomar. Se documenta para que quede registrado el hallazgo.
+
+**Criterio de aceptación "probado a mano al aire"**: sigue pendiente de
+tener una `ANTHROPIC_API_KEY` real a mano.
 
 ## Para estudiar antes de Fase 5
 

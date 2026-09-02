@@ -4,7 +4,7 @@ import random
 import re
 import urllib.request
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 
 from skywave.host.templates import render_script
 from skywave.library.track import Track
@@ -145,6 +145,55 @@ class OllamaGenerator:
             raise ValueError("Ollama devolvió un guion vacío")
         if not _mentions_track(text, starting):
             raise ValueError(f"Ollama inventó otro tema en vez de {starting.title!r}: {text!r}")
+        return text
+
+
+class ClaudeGenerator:
+    """Guiones contra la API de Claude (Messages API).
+
+    Mismo contrato y mismo criterio de fallas que OllamaGenerator: red,
+    timeout, respuesta vacía o tema inventado salen como excepción, y
+    quien decide qué hacer con eso es ResilientScriptWriter.
+
+    El SDK `anthropic` es un extra opcional (`pyproject.toml`,
+    `[project.optional-dependencies]`): no todo el mundo usa este
+    generador, así que no tiene sentido forzarlo como dependencia dura
+    de todo el proyecto. Por eso el import va acá adentro (recién
+    cuando alguien de verdad instancia esta clase) y no arriba del
+    módulo, donde rompería `skywave` entero para quien no instaló el
+    extra `claude`.
+    """
+
+    def __init__(
+        self,
+        model: str = "claude-haiku-4-5-20251001",
+        max_tokens: int = 100,
+        client: Any | None = None,
+    ) -> None:
+        if client is None:
+            try:
+                import anthropic
+            except ImportError as error:
+                raise ImportError(
+                    "Falta el extra 'claude': instalá con "
+                    "`uv sync --extra claude` (o `pip install skywave[claude]`)."
+                ) from error
+            client = anthropic.Anthropic()
+        self._client = client
+        self._model = model
+        self._max_tokens = max_tokens
+
+    def generate(self, ending: Track | None, starting: Track, now: datetime) -> str:
+        response = self._client.messages.create(
+            model=self._model,
+            max_tokens=self._max_tokens,
+            messages=[{"role": "user", "content": _prompt(ending, starting, now)}],
+        )
+        text = response.content[0].text.strip().strip('"').strip()
+        if not text:
+            raise ValueError("Claude devolvió un guion vacío")
+        if not _mentions_track(text, starting):
+            raise ValueError(f"Claude inventó otro tema en vez de {starting.title!r}: {text!r}")
         return text
 
 

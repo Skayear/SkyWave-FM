@@ -3,6 +3,7 @@ import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from pathlib import Path
 
 import typer
@@ -14,8 +15,10 @@ from skywave.ads.jingle import produce_ad
 from skywave.ads.render import list_ads, render_ads
 from skywave.host.cache import VoiceCache
 from skywave.host.scripts import (
+    ClaudeGenerator,
     OllamaGenerator,
     ResilientScriptWriter,
+    ScriptGenerator,
     TemplateGenerator,
     english_terms_for,
 )
@@ -183,7 +186,29 @@ def _ad_display_name(ad_path: Path) -> str:
     return ad_path.stem.replace("-", " ").replace("_", " ").title()
 
 
-def _build_locutor() -> tuple[ResilientScriptWriter, VoiceCache] | None:
+class Generador(StrEnum):
+    """Motor de guiones para el locutor -- issue #34: la interfaz
+    `ScriptGenerator` ya estaba pensada para esto, acá se elige cuál usar
+    sin tocar el resto del pipeline."""
+
+    ollama = "ollama"
+    claude = "claude"
+
+
+# Módulo-level (no inline en play()): el default es un miembro de Generador,
+# no un literal simple como True/3, y ruff (B008) pide sacar del signature
+# cualquier default que no sea trivial -- mismo criterio que _MountOption
+# y compañía más arriba.
+_GeneradorOption = typer.Option(
+    Generador.ollama,
+    "--generador",
+    help="Motor de guiones: ollama (local, gratis) o claude (API paga, ANTHROPIC_API_KEY).",
+)
+
+
+def _build_locutor(
+    generador: Generador = Generador.ollama,
+) -> tuple[ResilientScriptWriter, VoiceCache] | None:
     """Arma el pipeline del locutor (guiones + voz + cache). Si no se pudo
     cargar la voz (sin red la primera vez, por ejemplo), avisa y devuelve
     None: la radio sale igual, sin locutor."""
@@ -192,7 +217,22 @@ def _build_locutor() -> tuple[ResilientScriptWriter, VoiceCache] | None:
     except FileNotFoundError as error:
         console.print(f"[yellow]Sin locutor:[/yellow] {error}")
         return None
-    writer = ResilientScriptWriter(OllamaGenerator(), TemplateGenerator())
+    # load_dotenv() acá (no solo en _icecast_url, más abajo en el flujo de
+    # play()): ANTHROPIC_API_KEY tiene que estar en os.environ antes de este
+    # chequeo, y este chequeo corre primero.
+    load_dotenv()
+    primary: ScriptGenerator | None
+    if generador is Generador.claude:
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            primary = ClaudeGenerator()
+        else:
+            console.print(
+                "[yellow]Sin locutor con Claude:[/yellow] falta ANTHROPIC_API_KEY, uso plantillas."
+            )
+            primary = None
+    else:
+        primary = OllamaGenerator()
+    writer = ResilientScriptWriter(primary, TemplateGenerator())
     cache = VoiceCache(synthesizer.synthesize, voice_id=DEFAULT_VOICE)
     return writer, cache
 
@@ -207,6 +247,7 @@ def play(
     locutor: bool = typer.Option(
         True, "--locutor/--sin-locutor", help="Presentar los temas con voz entre tema y tema."
     ),
+    generador: Generador = _GeneradorOption,
     publicidades: bool = typer.Option(
         True, "--publicidades/--sin-publicidades", help="Intercalar publicidades entre temas."
     ),
@@ -244,7 +285,7 @@ def play(
         filtered = [track for track in catalog if track.artist not in excluded]
         return filtered or catalog
 
-    host = _build_locutor() if locutor else None
+    host = _build_locutor(generador) if locutor else None
     # Publicidades pre-renderizadas (issue #25/#26): si no hay ninguna
     # (todavía no se corrió `skywave render-ads`), la radio sigue igual,
     # sin publicidades — mismo principio de siempre, nunca se queda muda
