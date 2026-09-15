@@ -23,3 +23,5 @@ assets/ads/*.wav
 
 # Modelos de voz de Piper (~114MB, se bajan con python -m piper.download_voices)
 /voices/
+.spike-venv/
+spike-audio/
