@@ -104,11 +104,62 @@ compartido por volumen (confirma que los comandos de administración
 no necesitan correr dentro de Docker), y `docker compose down && up`
 sin perder la biblioteca (1341 tracks antes y después).
 
+## Seguimiento posterior a la fase
+
+### Activar Tailscale de verdad (issue [#39](https://github.com/Skayear/SkyWave-FM/issues/39))
+
+La sesión que dockerizó todo asumió que el deploy real iba a otro host
+("confirmado con Pablo... el deploy real va a otro host, donde
+Tailscale ya está configurado", más arriba). Eso cambió: **esta misma
+laptop (`skayear-latitude7400`) pasó a ser el host real.** Tailscale no
+estaba instalado en Manjaro -- `sudo pacman -S tailscale`, `sudo
+systemctl enable --now tailscaled`, `sudo tailscale set
+--operator=$USER` (para no necesitar `sudo` en cada comando de
+`tailscale` después) y `sudo tailscale up` (login interactivo por
+navegador). IP de la interfaz `tailscale0`: `100.68.185.59`
+(`tailscale ip -4`).
+
+`BIND_HOST`/`ICECAST_PUBLIC_HOST` en `.env` (gitignoreado, no
+commiteado) pasaron de `127.0.0.1`/`localhost` a esa IP. Confirmado con
+`ss -tlnp` que los puertos publicados (8001, 8010) quedan escuchando
+**solo** en `100.68.185.59` -- ni en `0.0.0.0` ni en la IP de LAN de la
+máquina. Probado a mano que `curl` contra `127.0.0.1:8001` y contra la
+IP de LAN (`192.168.x.x:8001`) da *connection refused* en los dos
+casos: nada expuesto fuera de la tailnet.
+
+`docker compose down && up` repetido con el stack real corriendo
+confirmó de nuevo que `skywave.db` sobrevive (1341 tracks antes y
+después) y que el mount de Icecast vuelve a sonar solo (audio real
+confirmado con `ffprobe`).
+
+**El primer intento de probar desde otro dispositivo falló** -- el
+celular no aparecía como peer en `tailscale status` (solo listaba esta
+laptop). La causa: se intentó activar Tailscale en el celular conectado
+al wifi de una oficina, que corta el tráfico UDP que Tailscale prefiere
+para conexión directa; a veces también bloquea el fallback por DERP
+relay (HTTPS/443) si hay un proxy con whitelist estricta. Se resolvió
+activando Tailscale en el celular por **datos móviles** en vez de ese
+wifi -- apareció al toque como peer (`redmi-note-13-pro-5g`), y desde
+ahí se confirmó a mano que `http://100.68.185.59:8001/` carga y
+`:8010/sky.mp3` suena.
+
+**Aparte, no estrictamente del alcance de este issue pero relacionado**:
+`ICECAST_SOURCE_PASSWORD`/`ICECAST_ADMIN_PASSWORD` en `.env` seguían en
+el valor por default (`changeme`) de `.env.example`. Con el stack
+expuesto de verdad en la tailnet (aunque sea acceso restringido, no
+público), no tenía sentido dejarlas así -- se generaron passwords
+random (`openssl rand -base64`), se regeneró `config/icecast.xml` con
+`scripts/render-icecast-config.sh` y se recreó el contenedor. Confirmado
+que el mount se reconecta con la password nueva.
+
+Los 4 criterios de aceptación del issue quedan confirmados a mano:
+`docker compose up` levanta todo junto, accesible desde otro
+dispositivo de la tailnet (celular, por datos móviles) y NO desde LAN
+ni localhost, `skywave.db` sobrevive `down && up`, sin código Python
+nuevo que lintear.
+
 ## Para retomar
 
-- Activar Tailscale de verdad en el host real y confirmar el criterio
-  de aceptación pendiente: accesible desde otro dispositivo de la
-  tailnet, confirmado que NO desde internet público.
 - El deadlock de `mixer/` en `Decoder.chunks()` cuando la interrupción
   llega a mitad de un chunk -- arreglar de raíz (por ejemplo, drenar
   el pipe del decoder antes de esperar a que ffmpeg termine, o usar un
