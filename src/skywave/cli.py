@@ -258,7 +258,7 @@ def play(
         True, "--saludos/--sin-saludos", help="Leer al aire los saludos que llegan por la web."
     ),
     saludos_every: int = typer.Option(
-        5, "--saludos-every", help="Cada cuántos temas se lee un saludo pendiente."
+        1, "--saludos-every", help="Cada cuántos temas se lee un saludo pendiente."
     ),
 ) -> None:
     """Sale al aire en modo radio: suena indefinidamente hasta Ctrl+C."""
