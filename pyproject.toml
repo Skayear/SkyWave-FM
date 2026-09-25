@@ -26,6 +26,9 @@ skywave = "skywave:main"
 claude = [
     "anthropic>=1.3.0",
 ]
+relay = [
+    "yt-dlp>=2026.8.19",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.33,<0.12.0"]

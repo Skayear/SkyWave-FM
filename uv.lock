@@ -1648,6 +1648,9 @@ dependencies = [
 claude = [
     { name = "anthropic" },
 ]
+relay = [
+    { name = "yt-dlp" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1669,8 +1672,9 @@ requires-dist = [
     { name = "torch", specifier = ">=2.13.0" },
     { name = "typer", specifier = ">=0.27.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.4" },
+    { name = "yt-dlp", marker = "extra == 'relay'", specifier = ">=2026.8.19" },
 ]
-provides-extras = ["claude"]
+provides-extras = ["claude", "relay"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2488,4 +2492,13 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c4/0f/270bafe92fde3b069a39bc01e39ee79340895b335640df861d43d2a51885/wrapt-2.3.0-cp314-cp314t-win_amd64.whl", hash = "sha256:42869085687f0aefd57c0f636c3f9354f8ffb321a8ba9cb52d19beb796e561c5", size = 83104, upload-time = "2026-07-28T06:05:52.405Z" },
     { url = "https://files.pythonhosted.org/packages/55/b3/af176d79a8515a8a720eccdad9a96f6e31a30abf2865430c8c42adf2fd13/wrapt-2.3.0-cp314-cp314t-win_arm64.whl", hash = "sha256:b1e5aa486e269b00ed35e64771c7d0ab8096cfd2643405ca8cd60ebedc099a51", size = 81774, upload-time = "2026-07-28T06:05:53.902Z" },
     { url = "https://files.pythonhosted.org/packages/00/39/3daf9f47be208606586de4568ba6713db53ebc8fd7a575aea1fe57983b69/wrapt-2.3.0-py3-none-any.whl", hash = "sha256:d8c7ed08477429752b8c44991f40ad7838b18332a160698740a6bfbc10d998a2", size = 61866, upload-time = "2026-07-28T06:06:12.9Z" },
+]
+
+[[package]]
+name = "yt-dlp"
+version = "2026.8.19"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1e/e0/832fa4ca334b766a06933a196066edc3dba37cdb6f14cd98d59bcc69a4b4/yt_dlp-2026.8.19.tar.gz", hash = "sha256:9e213e48cea35c66b378e4447903f118f6392a5fa380a2b6d7070ec86f4e0af1", size = 3052025, upload-time = "2026-08-19T23:48:59.291Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/69/b2/8cd1613f56eed7ceb64fbd4df3f1c01246bfb098e6f398228bafda22b80b/yt_dlp-2026.8.19-py3-none-any.whl", hash = "sha256:1d57897e94c6665a0a6f9bc54b34e584284e32c034ffab3a7df25d8f7b24eedf", size = 3185533, upload-time = "2026-08-19T23:48:56.925Z" },
 ]

@@ -28,8 +28,10 @@ from skywave.library import db
 from skywave.library.scanner import find_audio_files
 from skywave.library.tags import read_tags
 from skywave.library.track import Track
+from skywave.mixer.decoder import Decoder
 from skywave.mixer.encoder import Encoder
 from skywave.mixer.player import DEFAULT_CROSSFADE_SECONDS, play_ducked, play_track
+from skywave.mixer.youtube import resolve_audio_url
 from skywave.scheduler.ads import pick_next_ad, should_play_ad
 from skywave.scheduler.greetings import should_read_greeting
 from skywave.scheduler.selector import plan_queue
@@ -486,3 +488,30 @@ def play(
         with conn:
             db.clear_now_playing(conn)
             db.clear_upcoming_queue(conn)
+
+
+@app.command()
+def relay(
+    url: str = typer.Argument(..., help="URL de un video o directo de YouTube."),
+    mount: str = _MountOption,
+) -> None:
+    """Retransmite un video/directo de YouTube al aire -- modo separado de
+    `play`, sin locutor ni rotación de biblioteca (issue #43). Corre hasta
+    que la fuente termina sola o se corta con Ctrl+C."""
+    icecast_url = _icecast_url(mount)
+    try:
+        media_url = resolve_audio_url(url)
+    except ImportError as error:
+        console.print(f"[bold red]{error}[/bold red]")
+        raise typer.Exit(code=1) from error
+    console.print(f"Relay de {url} -> [bold]{mount}[/bold] (Ctrl+C para cortar)")
+    try:
+        # realtime=False: es una fuente en vivo, ya llega a ritmo real por
+        # la red -- el -re de Decoder es para pacear un archivo local, acá
+        # no hace nada más que agregar una capa de espera redundante.
+        with Encoder(icecast_url) as encoder:
+            for chunk in Decoder(media_url, realtime=False).chunks():
+                encoder.write(chunk)
+        console.print("El directo terminó, relay cortado.")
+    except KeyboardInterrupt:
+        console.print("\nCorte manual del relay.")

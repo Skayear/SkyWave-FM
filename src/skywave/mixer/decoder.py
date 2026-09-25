@@ -29,9 +29,15 @@ class Decoder:
 
     A diferencia del Encoder (persistente, vive toda la sesión), un
     Decoder vive solo mientras dura esa pista.
+
+    `path` acepta también una URL (`str`) en vez de un archivo local --
+    ffmpeg lee HTTP/HLS igual que un archivo, sin ningún cambio acá.
+    Es lo que usa el modo relay (issue #43) para una fuente en vivo
+    resuelta con yt-dlp: mismo Decoder, sin necesidad de una clase
+    aparte.
     """
 
-    def __init__(self, path: Path, *, realtime: bool = True) -> None:
+    def __init__(self, path: Path | str, *, realtime: bool = True) -> None:
         self._process = subprocess.Popen(
             [
                 "ffmpeg",
